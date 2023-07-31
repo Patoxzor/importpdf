@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog
-from IMPORT_PDF_MARKAS import extrair_dados_pdf
+from Extrair_dados import extrair_dados_pdf
 
 # Cria uma janela raiz e a esconde
 root = tk.Tk()
