@@ -17,6 +17,7 @@ def extrair_cadastro(text):
         'secretaria': r'SECRETARIA: (.*?)\nCARGO:',
         'centro_custo': r'CENTRO C.: (.*?) SECRETARIA',
         'cargo': r'CARGO: (.*) CPF/AG-C.C',
+        'salario': r'100\s*SALARIO.*?(\d{1,3}(?:\.\d{3})*,\d{2}).*$',
         'agencia': r'AG: (\d+)',
         'conta': r'CC: (\d+)'
         
@@ -39,31 +40,43 @@ def extrair_dados_pdf(f):
         for section in sections[1:]:  
             data.append(extrair_cadastro('FUNCIONÁRIO:' + section))  
 
-    df = pd.DataFrame(data, columns=['Funcionário', 'CPF', 'Admissao', 'Nascimento', 'Secretaria','centro_custo', 'Cargo', 'Agencia', 'Conta'])
+    df = pd.DataFrame(data, columns=['Funcionário', 'CPF', 'Admissao', 'Nascimento', 'Secretaria','centro_custo', 'Cargo','Salario', 'Agencia', 'Conta'])
     return df
 
-def comparar_pdfs(pdf1, pdf2, excel_file):
+def comparar_pdfs(pdf1, outros_pdfs, arquivo_excel):
     df1 = extrair_dados_pdf(pdf1)
-    df2 = extrair_dados_pdf(pdf2)
+
+    pdf_base_df1 = pd.DataFrame(columns=df1.columns)
+    outros_pdfs_df2 = pd.DataFrame(columns=df1.columns)
+
+    global_set= set()
+    
+    for pdf in outros_pdfs:
+        df2 = extrair_dados_pdf(pdf)
+
+        funcionarios_df2 = set(zip(df2['Funcionário'], df2['CPF'], df2['Admissao'], df2['Nascimento']))
+        global_set = global_set.union(funcionarios_df2)
 
     funcionarios_df1 = set(zip(df1['Funcionário'], df1['CPF'], df1['Admissao'], df1['Nascimento']))
-    funcionarios_df2 = set(zip(df2['Funcionário'], df2['CPF'], df2['Admissao'], df2['Nascimento']))
+    apenas_df1 = funcionarios_df1 - global_set
+    apenas_outros = global_set - funcionarios_df1
 
-    apenas_df1 = funcionarios_df1 - funcionarios_df2
-    apenas_df2 = funcionarios_df2 - funcionarios_df1
+    pdf_base_df1 = df1[df1.set_index(['Funcionário', 'CPF', 'Admissao', 'Nascimento']).index.isin(apenas_df1)]
 
-    df_apenas_df1 = df1[df1.set_index(['Funcionário', 'CPF', 'Admissao', 'Nascimento']).index.isin(apenas_df1)]
-    df_apenas_df2 = df2[df2.set_index(['Funcionário', 'CPF', 'Admissao', 'Nascimento']).index.isin(apenas_df2)]
+    for pdf in outros_pdfs:
+        df2 = extrair_dados_pdf(pdf)
+        df_apenas_outros = df2[df2.set_index(['Funcionário', 'CPF', 'Admissao', 'Nascimento']).index.isin(apenas_outros)]
+        outros_pdfs_df2 = pd.concat([outros_pdfs_df2, df_apenas_outros])
 
-    with pd.ExcelWriter(excel_file) as writer:
-        df_apenas_df1.to_excel(writer, sheet_name='Apenas no PDF1', index=False)
-        df_apenas_df2.to_excel(writer, sheet_name='Apenas no PDF2', index=False)
+    with pd.ExcelWriter(arquivo_excel) as writer:
+        pdf_base_df1.drop_duplicates().to_excel(writer, sheet_name='Apenas no PDF1', index=False)
+        outros_pdfs_df2.drop_duplicates().to_excel(writer, sheet_name='Não estão no PDF1', index=False)
 
 root = Tk()
 root.withdraw()
 
 pdf1 = filedialog.askopenfilename(title = "Selecione o primeiro PDF")
-pdf2 = filedialog.askopenfilename(title = "Selecione o segundo PDF")
-excel_file = filedialog.asksaveasfilename(title = "Salvar arquivo Excel", defaultextension=".xlsx")
+outros_pdfs = filedialog.askopenfilenames(title = "Selecione os outros PDFS")
+arquivo_excel = filedialog.asksaveasfilename(title = "Salvar arquivo Excel", defaultextension=".xlsx")
 
-comparar_pdfs(pdf1, pdf2, excel_file)
+comparar_pdfs(pdf1, outros_pdfs, arquivo_excel)
