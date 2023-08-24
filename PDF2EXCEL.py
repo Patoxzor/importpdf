@@ -1,8 +1,9 @@
 import tkinter as tk
 from tkinter import filedialog
 from Extrair_dados import extrair_dados_pdf
+import pandas as pd
+from excel_format import formatar_cabecalho, formatar_cpf, ajustar_largura_colunas, adicionar_bordas, remover_gridlines
 
-# Cria uma janela raiz e a esconde
 root = tk.Tk()
 root.withdraw()
 
@@ -16,6 +17,14 @@ print(f"Arquivo Excel será salvo em: {caminho_excel}")
 
 # Abra o arquivo PDF
 with open(caminho_pdf, 'rb') as f:
-    # Agora você pode usar esses caminhos com suas funções existentes
     df = extrair_dados_pdf(f)
-    df.to_excel(caminho_excel, index=False)
+    df['CPF'] = df['CPF'].apply(formatar_cpf)
+
+# Formatar e salvar o excel
+with pd.ExcelWriter(caminho_excel, engine='openpyxl') as writer:
+    df.to_excel(writer, sheet_name='Planilha Completa', index=False)
+    arquivo_excel = writer.sheets['Planilha Completa']
+    formatar_cabecalho(arquivo_excel)
+    ajustar_largura_colunas(arquivo_excel)
+    adicionar_bordas(arquivo_excel)
+    remover_gridlines(arquivo_excel)
