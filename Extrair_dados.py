@@ -4,8 +4,8 @@ import pandas as pd
 
 # Mapeamento de códigos para nomes de campos de "proventos"
 proventos_codes = {
-    '1': 'SALARIO BASE',
-    '66': 'GRATIFICACAO',
+    '107': 'GRATIFICAÇÃO',
+    '110': 'QUINQUENIO',
     '421': 'INCENTIVO FINANCEIRO'
     # Adicione mais códigos de proventos aqui
 }
@@ -58,6 +58,19 @@ def extrair_cadastro(text):
     # Adicione os novos campos à lista de resultados
     return [results.get(field, None) for field in patterns.keys()] + [results.get(field + suffix, None) for field in proventos_codes.values() for suffix in ['_QTD', '_VALOR']] + [results.get(field + suffix, None) for field in descontos_codes.values() for suffix in ['_QTD', '_VALOR']]
 
+def limpar_qtd_colunas(df):
+    #Função para limpar o valor de cada célula
+    def limpar_celular(valor_celular):
+        if isinstance(valor_celular, str):
+            return re.sub(r'[^0-9,.]', '', valor_celular)
+        return valor_celular
+
+    # Limpar as linhas das colunas que tem _QTD
+    for col in df.columns:
+        if col.endswith("_QTD"):
+            df[col] = df[col].apply(limpar_celular)
+    return df
+
 def extrair_dados_pdf(f):
     pdf = PdfReader(f)
 
@@ -73,5 +86,8 @@ def extrair_dados_pdf(f):
     df = pd.DataFrame(data, columns=['Codigo','Nome', 'Centro C.', 'Secretaria', 'Cargo', 'CPF', 'AG', 'CC', 'Admissão', 'Nascimento'] + 
                            [field + suffix for field in proventos_codes.values() for suffix in ['_QTD', '_VALOR']] +
                            [field + suffix for field in descontos_codes.values() for suffix in ['_QTD', '_VALOR']])
+    df = limpar_qtd_colunas(df)
     return df
+
+
 

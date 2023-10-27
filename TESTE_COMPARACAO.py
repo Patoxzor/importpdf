@@ -3,6 +3,7 @@ import re
 import pandas as pd
 from tkinter import filedialog
 from tkinter import Tk
+from excel_format import formatar_cpf
 
 def extract_field(text, pattern):
     match = re.search(pattern, text, re.MULTILINE)
@@ -62,11 +63,13 @@ def comparar_pdfs(pdf1, outros_pdfs, arquivo_excel):
     apenas_outros = global_set - funcionarios_df1
 
     pdf_base_df1 = df1[df1.set_index(['Funcionário', 'CPF', 'Admissao', 'Nascimento']).index.isin(apenas_df1)]
+    pdf_base_df1.loc[:, 'CPF'] = pdf_base_df1['CPF'].apply(formatar_cpf)
 
     for pdf in outros_pdfs:
         df2 = extrair_dados_pdf(pdf)
         df_apenas_outros = df2[df2.set_index(['Funcionário', 'CPF', 'Admissao', 'Nascimento']).index.isin(apenas_outros)]
         outros_pdfs_df2 = pd.concat([outros_pdfs_df2, df_apenas_outros])
+        outros_pdfs_df2.loc[:, 'CPF'] = outros_pdfs_df2['CPF'].apply(formatar_cpf)
 
     with pd.ExcelWriter(arquivo_excel) as writer:
         pdf_base_df1.drop_duplicates().to_excel(writer, sheet_name='Apenas no PDF1', index=False)
