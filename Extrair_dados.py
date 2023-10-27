@@ -4,8 +4,8 @@ import pandas as pd
 
 # Mapeamento de códigos para nomes de campos de "proventos"
 proventos_codes = {
-    '107': 'GRATIFICAÇÃO',
-    '110': 'QUINQUENIO',
+    '1': 'SALARIO BASE',
+    '66': 'GRATIFICACAO',
     '421': 'INCENTIVO FINANCEIRO'
     # Adicione mais códigos de proventos aqui
 }
@@ -23,7 +23,8 @@ def extract_field(text, pattern):
 
 def extrair_cadastro(text):
     patterns = {
-        'funcionario': r'FUNCIONÁRIO: (.*) PIS/PASEP',
+        'codigo': r'FUNCIONÁRIO: (.*) -',
+        'nome': r'FUNCIONÁRIO: \d+\s*-+\s*(.*) PIS/PASEP',
         'centro_c': r'CENTRO C.: (.*?) SECRETARIA',
         'secretaria': r'SECRETARIA: (.*?)\nCARGO:',
         'cargo': r'CARGO: (.*) CPF/AG-C.C',
@@ -32,7 +33,6 @@ def extrair_cadastro(text):
         'cc': r'CC: (\d+)',
         'admissao': r'ADMISSÃO: (.*) Nascimento',
         'nascimento': r'Nascimento:\s*(\d{2}/\d{2}/\d{4})',
-        'salario': r'100\s*SALARIO.*?(\d{1,3}(?:\.\d{3})*,\d{2}).*$'
     }
 
     results = {}
@@ -70,7 +70,7 @@ def extrair_dados_pdf(f):
             data.append(extrair_cadastro('FUNCIONÁRIO:' + section))  # Adicionar 'FUNCIONÁRIO:' de volta ao início da seção
 
     # Criar um DataFrame com os resultados
-    df = pd.DataFrame(data, columns=['Funcionário', 'Centro C.', 'Secretaria', 'Cargo', 'CPF', 'AG', 'CC', 'Admissão', 'Nascimento', 'Salario'] + 
+    df = pd.DataFrame(data, columns=['Codigo','Nome', 'Centro C.', 'Secretaria', 'Cargo', 'CPF', 'AG', 'CC', 'Admissão', 'Nascimento'] + 
                            [field + suffix for field in proventos_codes.values() for suffix in ['_QTD', '_VALOR']] +
                            [field + suffix for field in descontos_codes.values() for suffix in ['_QTD', '_VALOR']])
     return df

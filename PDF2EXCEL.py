@@ -16,6 +16,5 @@ print(f"Arquivo Excel será salvo em: {caminho_excel}")
 
 # Abra o arquivo PDF
 with open(caminho_pdf, 'rb') as f:
-    # Agora você pode usar esses caminhos com suas funções existentes
     df = extrair_dados_pdf(f)
     df.to_excel(caminho_excel, index=False)
