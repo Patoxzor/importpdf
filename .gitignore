@@ -1,0 +1,11 @@
+# Ignora todos os arquivos .spec
+*.spec
+*.json
+*achar valores de x e y.txt
+
+# Ignora o diretório _pycache_
+__pycache__/
+build/
+dist/
+
+ 

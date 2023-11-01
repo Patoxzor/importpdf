@@ -1,5 +1,8 @@
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
+from PIL import ImageTk, Image
+import sys
+import os
 from Extrair_dados import extrair_dados_pdf
 import pandas as pd
 from excel_format import formatar_cabecalho, formatar_cpf, ajustar_largura_colunas, adicionar_bordas, remover_gridlines
@@ -9,11 +12,9 @@ root.withdraw()
 
 # Solicita ao usuário para selecionar o arquivo PDF
 caminho_pdf= filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
-print(f"Arquivo PDF selecionado: {caminho_pdf}")
 
 # Solicita ao usuário para selecionar o local para salvar o arquivo Excel
 caminho_excel = filedialog.asksaveasfilename(defaultextension=".xlsx")
-print(f"Arquivo Excel será salvo em: {caminho_excel}")
 
 # Abra o arquivo PDF
 with open(caminho_pdf, 'rb') as f:
