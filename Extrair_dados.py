@@ -56,7 +56,7 @@ def limpar_qtd_colunas(df):
     return df
 
 # O principal ajuste é passar os dicionários `codigos_proventos` e `codigos_desconto` como parâmetros para a função `extrair_dados_pdf`
-def extrair_dados_pdf(f, codigos_proventos, codigos_desconto):
+def extrair_dados_pdf(f, codigos_proventos, codigos_desconto, mapeamento_codigos=None):
     pdf = PdfReader(f)
 
     data = []
@@ -69,5 +69,9 @@ def extrair_dados_pdf(f, codigos_proventos, codigos_desconto):
     df = pd.DataFrame(data, columns=['Codigo', 'Nome', 'Centro C.', 'Secretaria', 'Cargo', 'CPF', 'AG', 'CC', 'Admissão', 'Nascimento'] +
                       [field + suffix for field in codigos_proventos.values() for suffix in ['_QTD', '_VALOR']] +
                       [field + suffix for field in codigos_desconto.values() for suffix in ['_QTD', '_VALOR']])
+    if mapeamento_codigos:
+        df['Codigo'] = df['Codigo'].map(mapeamento_codigos).fillna(df['Codigo'])
+
+
     df = limpar_qtd_colunas(df)
     return df
