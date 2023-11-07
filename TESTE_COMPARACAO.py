@@ -11,7 +11,8 @@ def extract_field(text, pattern):
 
 def extrair_cadastro(text):
     patterns = {
-        'funcionario': r'FUNCIONÁRIO: (.*) PIS/PASEP',       
+        'codigo': r'FUNCIONÁRIO: (.*) -',
+        'nome': r'FUNCIONÁRIO: \d+\s*-+\s*(.*) PIS/PASEP',     
         'cpf': r'CPF/AG-C.C: (.*) /',
         'admissao': r'ADMISSÃO: (.*) Nascimento',
         'nascimento': r'Nascimento:\s*(\d{2}/\d{2}/\d{4})',
@@ -41,7 +42,7 @@ def extrair_dados_pdf(f):
         for section in sections[1:]:  
             data.append(extrair_cadastro('FUNCIONÁRIO:' + section))  
 
-    df = pd.DataFrame(data, columns=['Funcionário', 'CPF', 'Admissao', 'Nascimento', 'Secretaria','centro_custo', 'Cargo','Salario', 'Agencia', 'Conta'])
+    df = pd.DataFrame(data, columns=['Codigo','Nome', 'CPF', 'Admissao', 'Nascimento', 'Secretaria','centro_custo', 'Cargo','Salario', 'Agencia', 'Conta'])
     return df
 
 def comparar_pdfs(pdf1, outros_pdfs, arquivo_excel):
@@ -55,25 +56,25 @@ def comparar_pdfs(pdf1, outros_pdfs, arquivo_excel):
     for pdf in outros_pdfs:
         df2 = extrair_dados_pdf(pdf)
 
-        funcionarios_df2 = set(zip(df2['Funcionário'], df2['CPF'], df2['Admissao'], df2['Nascimento']))
+        funcionarios_df2 = set(zip(df2['Codigo'], df2['CPF'], df2['Admissao'], df2['Nascimento']))
         global_set = global_set.union(funcionarios_df2)
 
-    funcionarios_df1 = set(zip(df1['Funcionário'], df1['CPF'], df1['Admissao'], df1['Nascimento']))
+    funcionarios_df1 = set(zip(df1['Codigo'], df1['CPF'], df1['Admissao'], df1['Nascimento']))
     apenas_df1 = funcionarios_df1 - global_set
     apenas_outros = global_set - funcionarios_df1
 
-    pdf_base_df1 = df1[df1.set_index(['Funcionário', 'CPF', 'Admissao', 'Nascimento']).index.isin(apenas_df1)]
+    pdf_base_df1 = df1[df1.set_index(['Codigo', 'CPF', 'Admissao', 'Nascimento']).index.isin(apenas_df1)]
     pdf_base_df1.loc[:, 'CPF'] = pdf_base_df1['CPF'].apply(formatar_cpf)
 
     for pdf in outros_pdfs:
         df2 = extrair_dados_pdf(pdf)
-        df_apenas_outros = df2[df2.set_index(['Funcionário', 'CPF', 'Admissao', 'Nascimento']).index.isin(apenas_outros)]
+        df_apenas_outros = df2[df2.set_index(['Codigo', 'CPF', 'Admissao', 'Nascimento']).index.isin(apenas_outros)]
         outros_pdfs_df2 = pd.concat([outros_pdfs_df2, df_apenas_outros])
         outros_pdfs_df2.loc[:, 'CPF'] = outros_pdfs_df2['CPF'].apply(formatar_cpf)
 
     with pd.ExcelWriter(arquivo_excel) as writer:
-        pdf_base_df1.drop_duplicates().to_excel(writer, sheet_name='Apenas no PDF1', index=False)
-        outros_pdfs_df2.drop_duplicates().to_excel(writer, sheet_name='Não estão no PDF1', index=False)
+        pdf_base_df1.drop_duplicates(subset=['CPF', 'Codigo']).to_excel(writer, sheet_name='Apenas no PDF1', index=False)
+        outros_pdfs_df2.drop_duplicates(subset=['CPF', 'Codigo']).to_excel(writer, sheet_name='Não estão no PDF1', index=False)
 
 root = Tk()
 root.withdraw()

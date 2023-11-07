@@ -31,6 +31,6 @@ def button_style():
 def label_style():
     return {
         "font": ("Arial", 10, "bold"),
-        "bg": "#ffffff",  # Cor de fundo padrão para Labels
-        "fg": "#000000",  # Cor do texto padrão para Labels
+        "bg": "#ffffff",
+        "fg": "#000000",
     }
