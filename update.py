@@ -59,4 +59,3 @@ def check_for_updates():
                 browser_download_url = assets[0]['browser_download_url']
                 download_and_install_update(browser_download_url, latest_version)
 
-check_for_updates()
