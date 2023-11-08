@@ -6,6 +6,7 @@ from excel_format import formatar_cabecalho, formatar_cpf, ajustar_largura_colun
 from config_json import ConfigManager
 from style_interface import configure_treeview_style, button_style, label_style
 from update import check_for_updates
+from icons_pics import ImageLoader
 import os
 import tkinter.colorchooser as colorchooser
 
@@ -13,15 +14,19 @@ class App:
     def __init__(self, root):
         self.root = root
         self.root.title("Extrair dados de PDF ANDRE MARKAS - Bebeto Apps Inc. - 1.0.0")
+        self.image_loader = ImageLoader()
         self.setup_ui()
         self.codigos_data = ConfigManager.load_from_file()
+        current_directory = os.path.dirname(os.path.realpath(__file__))
+        icon_path = os.path.join(current_directory, 'icone.ico')
+        self.root.iconbitmap(icon_path)
         self.codigos_proventos = self.codigos_data.get("proventos", {})
         self.codigos_desconto = self.codigos_data.get("descontos", {})
         self.mapeamento_codigos = self.codigos_data.get("mapeamento", {})
         self.color_preferences = ConfigManager.load_color_preferences()
         self.root.configure(background=self.color_preferences.get('background'))
-        self.frame_buttons.configure(background=self.color_preferences.get('background'))
-        self.update_button_background_color(self.color_preferences.get('button_background'))
+        self.frame_buttons.configure(background=self.color_preferences.get('background')),
+        self.color_button_frame.configure(background=self.color_preferences.get('background'))
         self.label_filename.configure(bg=self.color_preferences.get('background'))
     
     def setup_ui(self):
@@ -33,6 +38,7 @@ class App:
         self.label_filename = tk.Label(self.root, text="Nenhum arquivo selecionado", **label_style_config)
         self.label_filename.pack(pady=10)
         self.excel_filename = None
+        self.image_loader.load('palette_icon', 'palette.png')
         self.create_color_buttons()
         self.create_buttons()
         self.create_treeview()
@@ -59,19 +65,15 @@ class App:
         self.button_view_mapping.pack(side=tk.LEFT, padx=10)
 
     def create_color_buttons(self):
+        palette_icon = self.image_loader.get('palette_icon')
+        
+        # Configura o botão para usar a imagem
         self.button_change_bg_color = tk.Button(
-            self.color_button_frame, 
-            text="Cor de Fundo", 
-            command=lambda: self.choose_color('background'), 
+            self.color_button_frame,
+            image=palette_icon,
+            command=lambda: self.choose_color('background'),
         )
         self.button_change_bg_color.pack(side=tk.LEFT, padx=2)
-
-        self.button_change_button_color = tk.Button(
-            self.color_button_frame, 
-            text="Cor dos Botões", 
-            command=lambda: self.choose_color('buttons'), 
-        )
-        self.button_change_button_color.pack(side=tk.LEFT, padx=2)
 
 
     def choose_color(self, target):
@@ -89,26 +91,9 @@ class App:
     def update_background_color(self, color):
         self.root.configure(background=color)
         self.frame_buttons.configure(background=color)
+        self.color_button_frame.configure(background=color)
         self.label_filename.configure(bg=color)
         self.color_preferences['background'] = color
-        ConfigManager.save_color_preferences(self.color_preferences)
-
-
-    def update_button_background_color(self, color):
-        # Esta função deve atualizar apenas a cor de fundo dos botões, não o frame
-        button_style = {'bg': color}
-        for widget in self.frame_buttons.winfo_children():
-            if isinstance(widget, tk.Button):
-                widget.configure(**button_style)
-        self.color_preferences['button_background'] = color
-        ConfigManager.save_color_preferences(self.color_preferences)
-
-    def update_button_colors(self, color):
-        # Esta função atualiza apenas a cor de fundo dos botões.
-        for widget in self.frame_buttons.winfo_children():
-            if isinstance(widget, tk.Button):
-                widget.configure(bg=color)
-        self.color_preferences['button_background'] = color
         ConfigManager.save_color_preferences(self.color_preferences)
 
     def create_treeview(self):
