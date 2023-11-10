@@ -10,6 +10,7 @@ import os
 import tkinter.colorchooser as colorchooser
 from database_utils import get_sql_server_databases, verificar_todos_funcionarios
 
+
 class App:
     def __init__(self, root):
         self.root = root
@@ -27,6 +28,7 @@ class App:
         self.frame_buttons.configure(background=self.color_preferences.get('background')),
         self.color_button_frame.configure(background=self.color_preferences.get('background'))
         self.label_filename.configure(bg=self.color_preferences.get('background'))
+        check_for_updates()
     
     def setup_ui(self):
         self.color_button_frame = tk.Frame(self.root)
@@ -388,8 +390,6 @@ class App:
             # Aqui você pediria também para a descrição ou o mapeamento correspondente ao novo código
             new_mapping = simpledialog.askstring("Adicionar código/matricula", "Digite o código novo:")
             if new_mapping:
-                # Adicionar ao dicionário de mapeamentos
-                # Supondo que você tenha um dicionário chamado mapeamento_codigos para armazenar isso
                 self.mapeamento_codigos[new_code] = new_mapping
                 self.update_listbox(self.listbox_mapping, 'mapping')
                 self.save_codigos() 
@@ -501,7 +501,6 @@ class App:
             os.system(f'start excel "{self.excel_filename}"')
 
 if __name__ == "__main__":
-    check_for_updates()
     root = tk.Tk()
     app = App(root)
     root.mainloop()
