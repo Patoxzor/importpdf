@@ -6,15 +6,14 @@ from excel_format import formatar_cabecalho, formatar_cpf, ajustar_largura_colun
 from config_json import ConfigManager
 from style_interface import configure_treeview_style, button_style, label_style
 from update import check_for_updates
-from icons_pics import ImageLoader
 import os
 import tkinter.colorchooser as colorchooser
+from database_utils import get_sql_server_databases, verificar_todos_funcionarios
 
 class App:
     def __init__(self, root):
         self.root = root
         self.root.title("Extrair dados de PDF ANDRE MARKAS - Bebeto Apps Inc. - 1.0.0")
-        self.image_loader = ImageLoader()
         self.setup_ui()
         self.codigos_data = ConfigManager.load_from_file()
         current_directory = os.path.dirname(os.path.realpath(__file__))
@@ -34,11 +33,12 @@ class App:
         self.color_button_frame.pack(anchor='ne', padx=10, pady=10)
         self.frame_buttons = tk.Frame(self.root)
         self.frame_buttons.pack(pady=20)
+        self.create_database_combobox()
+        self.create_verify_button()
         label_style_config = label_style()
         self.label_filename = tk.Label(self.root, text="Nenhum arquivo selecionado", **label_style_config)
         self.label_filename.pack(pady=10)
         self.excel_filename = None
-        self.image_loader.load('palette_icon', 'palette.png')
         self.create_color_buttons()
         self.create_buttons()
         self.create_treeview()
@@ -65,15 +65,69 @@ class App:
         self.button_view_mapping.pack(side=tk.LEFT, padx=10)
 
     def create_color_buttons(self):
-        palette_icon = self.image_loader.get('palette_icon')
+        current_directory = os.path.dirname(os.path.realpath(__file__))
         
-        # Configura o botão para usar a imagem
+        palette_icon_path = os.path.join(current_directory, 'palette.png')
+
+        palette_icon = tk.PhotoImage(file=palette_icon_path)
+
         self.button_change_bg_color = tk.Button(
             self.color_button_frame,
             image=palette_icon,
             command=lambda: self.choose_color('background'),
         )
         self.button_change_bg_color.pack(side=tk.LEFT, padx=2)
+        self.button_change_bg_color.image = palette_icon
+    
+    def create_database_combobox(self):
+        self.combobox_label = tk.Label(self.root, text="Selecione o banco de dados:", **label_style())
+        self.combobox_label.pack(pady=5)
+
+        self.database_combobox = ttk.Combobox(self.root, values=get_sql_server_databases(), state='readonly')
+        self.database_combobox.pack(pady=5)
+
+    def create_verify_button(self):
+        self.button_verify = tk.Button(self.root, text="Verificar no SQL Server", command=self.verify_in_sql_server, state=tk.DISABLED, **button_style())
+        self.button_verify.pack(pady=10)
+
+    def verify_in_sql_server(self):
+        selected_database = self.database_combobox.get()
+        if selected_database:
+            self.verificar_dados(selected_database)
+        else:
+            messagebox.showwarning("Aviso", "Por favor, selecione um banco de dados para verificar.")
+
+    def verificar_dados(self, database):
+        lista_funcionarios = self.df.to_dict('records')
+        funcionarios_nao_encontrados = verificar_todos_funcionarios(database, lista_funcionarios)
+        
+        if funcionarios_nao_encontrados:
+            self.mostrar_funcionarios_nao_encontrados(funcionarios_nao_encontrados)
+        else:
+            messagebox.showinfo("Verificação", "Todos os funcionários foram encontrados no banco de dados.")
+
+
+    def mostrar_funcionarios_nao_encontrados(self, funcionarios_nao_encontrados):
+        new_window = tk.Toplevel(self.root)
+        new_window.title("Funcionários não encontrados")
+
+        # Cria um Treeview na nova janela
+        tree = ttk.Treeview(new_window, columns=list(funcionarios_nao_encontrados[0].keys()), show='headings')
+        tree.pack(expand=True, fill='both', padx=10, pady=10)
+
+        # Adiciona as colunas ao Treeview
+        for col in funcionarios_nao_encontrados[0].keys():
+            tree.heading(col, text=col)
+
+        # Insere os dados no Treeview
+        for funcionario in funcionarios_nao_encontrados:
+            tree.insert('', 'end', values=list(funcionario.values()))
+
+        # Use um DataFrame temporário para os dados não encontrados
+        df_nao_encontrados = pd.DataFrame(funcionarios_nao_encontrados)
+
+        button_save = tk.Button(new_window, text="Salvar em Excel", command=lambda: self.save_excel(df_nao_encontrados))
+        button_save.pack(pady=10)
 
 
     def choose_color(self, target):
@@ -163,16 +217,14 @@ class App:
         popup.title("Visualizar Códigos Adicionados")
         popup.geometry("500x500")
 
-        # Frame para proventos
         frame_proventos = tk.Frame(popup)
         frame_proventos.pack(pady=10, padx=10, fill=tk.X)
 
         label_proventos = tk.Label(frame_proventos, text="Proventos", font=("Arial", 12))
         label_proventos.pack()
 
-        # Cria a Listbox e atribui ao atributo da classe
         self.listbox_proventos = tk.Listbox(frame_proventos)
-        self.update_listbox(self.listbox_proventos, 'provento')  # Atualiza a listbox com os dados atuais
+        self.update_listbox(self.listbox_proventos, 'provento')
         self.listbox_proventos.pack(fill=tk.X)
 
         btn_add_provento = tk.Button(frame_proventos, text="Adicionar", command=lambda: self.add_provento(self.listbox_proventos))
@@ -397,6 +449,7 @@ class App:
                 self.df['CPF'] = self.df['CPF'].apply(formatar_cpf)
             self.populate_tree()
             self.button_save.config(state=tk.NORMAL)
+            self.button_verify.config(state=tk.NORMAL)
         except Exception as e:
             messagebox.showerror("Erro", str(e))
 
@@ -423,28 +476,31 @@ class App:
         self.tree.tag_configure('evenrow', background=even_color)
         self.tree.tag_configure('oddrow', background=odd_color)
 
-    def save_excel(self):
+    def save_excel(self, df=None):
+        if df is None:
+            df = self.df
+
         excel_filename = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Arquivos XLSX", "*.xlsx")])
         if excel_filename:
             with pd.ExcelWriter(excel_filename, engine='openpyxl') as writer:
-                self.df.to_excel(writer, index=False, sheet_name='Planilha')               
+                df.to_excel(writer, index=False, sheet_name='Planilha')
                 planilha = writer.sheets['Planilha']
-                
+
                 formatar_cabecalho(planilha)
                 ajustar_largura_colunas(planilha)
                 adicionar_bordas(planilha)
                 remover_gridlines(planilha)
-                
+
             self.excel_filename = excel_filename
             self.button_open_excel.config(state=tk.NORMAL)
             messagebox.showinfo("Sucesso", "Dados salvos com sucesso!")
+
 
     def open_excel(self):
         if self.excel_filename:
             os.system(f'start excel "{self.excel_filename}"')
 
 if __name__ == "__main__":
-    # verifique se há atualizações disponíveis
     check_for_updates()
     root = tk.Tk()
     app = App(root)
