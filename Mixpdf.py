@@ -5,10 +5,11 @@ from data_func import extrair_dados_pdf
 from excel_format import formatar_cabecalho, formatar_cpf, ajustar_largura_colunas, adicionar_bordas, remover_gridlines
 from config_json import ConfigManager
 from style_interface import configure_treeview_style, button_style, label_style
-from update import check_for_updates
+from update import check_for_updates, download_and_install_update
 import os
 import tkinter.colorchooser as colorchooser
 from database_utils import get_sql_server_databases, verificar_todos_funcionarios
+from eventos import extrair_e_categorizar_dados
 
 
 class App:
@@ -31,6 +32,7 @@ class App:
         check_for_updates()
     
     def setup_ui(self):
+        self.check_and_notify_updates()
         self.color_button_frame = tk.Frame(self.root)
         self.color_button_frame.pack(anchor='ne', padx=10, pady=10)
         self.frame_buttons = tk.Frame(self.root)
@@ -45,6 +47,21 @@ class App:
         self.create_buttons()
         self.create_treeview()
         self.create_scrollbars()
+
+    def check_and_notify_updates(self):
+        current_version = ConfigManager.load_version()
+        latest_version, download_url = check_for_updates()  
+
+        if latest_version:
+            self.notify_user_of_update(latest_version, download_url)
+
+    def notify_user_of_update(self, latest_version, download_url):
+        response = messagebox.askyesno("Atualização Disponível", 
+                                    f"Uma nova versão {latest_version} está disponível. Deseja atualizar agora?",
+                                    parent=self.root)
+        if response:
+            download_and_install_update(download_url, latest_version)
+
 
     def create_buttons(self):
         style = button_style()
@@ -213,6 +230,32 @@ class App:
             self.button_extract.config(state=tk.NORMAL)
             self.update_listbox(listbox_descontos, 'desconto')
             self.save_codigos()
+    
+    # Dentro da classe App
+
+    def import_events_from_pdf(self):
+        if not self.filename:
+            messagebox.showwarning("Aviso", "Por favor, selecione um arquivo PDF primeiro.")
+            return
+
+        try:
+            proventos, descontos = extrair_e_categorizar_dados(self.filename)
+            
+            # Atualiza as listas de proventos e descontos com os novos dados
+            self.codigos_proventos.update({codigo: descricao for codigo, descricao in proventos})
+            self.codigos_desconto.update({codigo: descricao for codigo, descricao in descontos})
+
+            # Salva as alterações
+            self.save_codigos()
+            
+            # Atualiza as listboxes com os novos dados
+            self.update_listbox(self.listbox_proventos, 'provento')
+            self.update_listbox(self.listbox_descontos, 'desconto')
+            
+            messagebox.showinfo("Sucesso", "Eventos importados com sucesso do PDF.")
+        except Exception as e:
+            messagebox.showerror("Erro", str(e))
+
 
     def view_codes(self):
         popup = tk.Toplevel(self.root)
@@ -237,6 +280,10 @@ class App:
 
         btn_remove_provento = tk.Button(frame_proventos, text="Remover", command=lambda: self.remove_code(self.listbox_proventos, 'provento'))
         btn_remove_provento.pack(side=tk.LEFT, padx=5)
+
+        btn_import_events = tk.Button(frame_proventos, text="Importar do PDF", command=self.import_events_from_pdf)
+        btn_import_events.pack(side=tk.LEFT, padx=5)
+
 
         frame_descontos = tk.Frame(popup)
         frame_descontos.pack(pady=10, padx=10, fill=tk.X)
