@@ -13,11 +13,9 @@ def get_latest_release_info():
     return response.json() if response.ok else None
 
 def download_and_install_update(url, version):
-    # Baixando o executável
     local_filename = f'Mixpdf - {version}.exe'
     urlretrieve(url, local_filename)
 
-    # Preparando para instalar a atualização
     current_app_path = os.path.abspath(sys.argv[0])
 
     # Verificar se o caminho atual é um arquivo .exe

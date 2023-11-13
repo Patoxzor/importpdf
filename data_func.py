@@ -2,7 +2,6 @@ from PyPDF2 import PdfReader
 import re
 import pandas as pd
 
-# Funções auxiliares permanecem as mesmas
 def extract_field(text, pattern):
     match = re.search(pattern, text, re.MULTILINE)
     return match.group(1) if match else None

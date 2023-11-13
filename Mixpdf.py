@@ -15,7 +15,7 @@ from eventos import extrair_e_categorizar_dados
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("Extrair dados de PDF ANDRE MARKAS - Bebeto Apps Inc. - 1.0.0")
+        self.root.title("Extrair dados de PDF ANDRE MARKAS - Bebeto Apps Inc. - 1.0.1")
         self.setup_ui()
         self.codigos_data = ConfigManager.load_from_file()
         current_directory = os.path.dirname(os.path.realpath(__file__))
@@ -29,6 +29,8 @@ class App:
         self.frame_buttons.configure(background=self.color_preferences.get('background')),
         self.color_button_frame.configure(background=self.color_preferences.get('background'))
         self.label_filename.configure(bg=self.color_preferences.get('background'))
+        self.label_proventos = None
+        self.label_descontos = None
         check_for_updates()
     
     def setup_ui(self):
@@ -142,7 +144,6 @@ class App:
         for funcionario in funcionarios_nao_encontrados:
             tree.insert('', 'end', values=list(funcionario.values()))
 
-        # Use um DataFrame temporário para os dados não encontrados
         df_nao_encontrados = pd.DataFrame(funcionarios_nao_encontrados)
 
         button_save = tk.Button(new_window, text="Salvar em Excel", command=lambda: self.save_excel(df_nao_encontrados))
@@ -179,7 +180,6 @@ class App:
         self.canvas.bind("<Configure>", self.on_canvas_configure)
         self.tree_frame.bind("<Configure>", self.on_frame_configure)
 
-        # Treeview para exibir os dados
         self.tree = ttk.Treeview(self.tree_frame, columns=[str(i) for i in range(100)], show="headings")
         self.tree.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
         configure_treeview_style()
@@ -230,8 +230,6 @@ class App:
             self.button_extract.config(state=tk.NORMAL)
             self.update_listbox(listbox_descontos, 'desconto')
             self.save_codigos()
-    
-    # Dentro da classe App
 
     def import_events_from_pdf(self):
         if not self.filename:
@@ -241,14 +239,9 @@ class App:
         try:
             proventos, descontos = extrair_e_categorizar_dados(self.filename)
             
-            # Atualiza as listas de proventos e descontos com os novos dados
-            self.codigos_proventos.update({codigo: descricao for codigo, descricao in proventos})
-            self.codigos_desconto.update({codigo: descricao for codigo, descricao in descontos})
-
-            # Salva as alterações
-            self.save_codigos()
-            
-            # Atualiza as listboxes com os novos dados
+            self.codigos_proventos.update({codigo: descricao for codigo, descricao, _, _ in proventos})
+            self.codigos_desconto.update({codigo: descricao for codigo, descricao, _, _ in descontos})
+            self.save_codigos()         
             self.update_listbox(self.listbox_proventos, 'provento')
             self.update_listbox(self.listbox_descontos, 'desconto')
             
@@ -258,6 +251,7 @@ class App:
 
 
     def view_codes(self):
+        
         popup = tk.Toplevel(self.root)
         popup.title("Visualizar Códigos Adicionados")
         popup.geometry("500x500")
@@ -265,8 +259,9 @@ class App:
         frame_proventos = tk.Frame(popup)
         frame_proventos.pack(pady=10, padx=10, fill=tk.X)
 
-        label_proventos = tk.Label(frame_proventos, text="Proventos", font=("Arial", 12))
-        label_proventos.pack()
+        self.label_proventos = tk.Label(frame_proventos, text="Proventos", font=("Arial", 12))
+        self.label_proventos.pack()
+
 
         self.listbox_proventos = tk.Listbox(frame_proventos)
         self.update_listbox(self.listbox_proventos, 'provento')
@@ -288,11 +283,11 @@ class App:
         frame_descontos = tk.Frame(popup)
         frame_descontos.pack(pady=10, padx=10, fill=tk.X)
 
-        label_descontos = tk.Label(frame_descontos, text="Descontos", font=("Arial", 12))
-        label_descontos.pack()
+        self.label_descontos = tk.Label(frame_descontos, text="Descontos", font=("Arial", 12))
+        self.label_descontos.pack()
 
         self.listbox_descontos = tk.Listbox(frame_descontos)
-        self.update_listbox(self.listbox_descontos, 'desconto')  # Atualiza a listbox com os dados atuais
+        self.update_listbox(self.listbox_descontos, 'desconto') 
         self.listbox_descontos.pack(fill=tk.X)
 
         btn_add_desconto = tk.Button(frame_descontos, text="Adicionar", command=lambda: self.add_desconto(self.listbox_descontos))
@@ -316,13 +311,18 @@ class App:
 
 
     def update_listbox(self, listbox, tipo):
-        listbox.delete(0, tk.END)  # Limpa a listbox antes de adicionar novos itens
+        listbox.delete(0, tk.END)  
 
-        # Escolhe o dicionário apropriado com base no tipo
         if tipo == 'provento':
             items = self.codigos_proventos.items()
+            total = len(items)
+            if self.label_proventos:
+                self.label_proventos.config(text=f"Proventos ({total})")
         elif tipo == 'desconto':
             items = self.codigos_desconto.items()
+            total = len(items)
+            if self.label_descontos:
+                self.label_descontos.config(text=f"Descontos ({total})")
         elif tipo == 'mapping':
             items = self.mapeamento_codigos.items()
         else:
@@ -330,7 +330,6 @@ class App:
 
         for code, desc in items:
             listbox.insert(tk.END, f"{code} - {desc}")
-
     
     def remove_code(self, listbox, tipo):
         selected = listbox.curselection()
@@ -454,7 +453,6 @@ class App:
         if new_code:
             new_mapping = simpledialog.askstring("Editar código/matricula", f"Digite o novo código/matricula para o código '{new_code}':")
             if new_mapping:
-                # Aqui você atualizaria o dicionário de mapeamentos
                 del self.mapeamento_codigos[old_code]
                 self.mapeamento_codigos[new_code] = new_mapping
                 self.update_listbox(self.listbox_mapping, 'mapping')
@@ -491,7 +489,6 @@ class App:
     def extract_data(self):
         try:
             self.df = extrair_dados_pdf(self.filename, self.codigos_proventos, self.codigos_desconto, self.mapeamento_codigos)
-            #Formatar CPF
             if 'CPF' in self.df.columns:
                 self.df['CPF'] = self.df['CPF'].apply(formatar_cpf)
             self.populate_tree()
