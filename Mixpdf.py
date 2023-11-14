@@ -8,7 +8,7 @@ from style_interface import configure_treeview_style, button_style, label_style
 from update import check_for_updates, download_and_install_update
 import os
 import tkinter.colorchooser as colorchooser
-from database_utils import get_sql_server_databases, verificar_todos_funcionarios
+from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_registro
 from eventos import extrair_e_categorizar_dados
 
 
@@ -146,8 +146,57 @@ class App:
 
         df_nao_encontrados = pd.DataFrame(funcionarios_nao_encontrados)
 
+        button_verify = tk.Button(new_window, text="Verificar Centro de Custo e Localização", command=lambda: self.verificar_e_criar_registros(funcionarios_nao_encontrados))
+        button_verify.pack(pady=10)
+
         button_save = tk.Button(new_window, text="Salvar em Excel", command=lambda: self.save_excel(df_nao_encontrados))
         button_save.pack(pady=10)
+
+    def verificar_e_criar_registros(self):
+        centros_custo_ausentes = set()
+        localizacoes_ausentes = set()
+
+        for funcionario in self.funcionarios_nao_encontrados:
+            if not verificar_existencia(self.database, "CentroCusto", funcionario["CentroCusto"]):
+                centros_custo_ausentes.add(funcionario["CentroCusto"])
+
+            if not verificar_existencia(self.database, "Localizacao", funcionario["Localizacao"]):
+                localizacoes_ausentes.add(funcionario["Localizacao"])
+
+        if centros_custo_ausentes or localizacoes_ausentes:
+            self.mostrar_resultados_e_perguntar_criacao(centros_custo_ausentes, localizacoes_ausentes)
+        else:
+            messagebox.showinfo("Verificação", "Todos os centros de custo e localizações foram encontrados.")
+    
+    def mostrar_resultados_e_perguntar_criacao(self, centros_custo, localizacoes):
+        resultado_window = tk.Toplevel(self.root)
+        resultado_window.title("Resultados da Verificação")
+
+        # Exibir centros de custo não encontrados
+        label_cc = tk.Label(resultado_window, text="Centros de Custo Não Encontrados")
+        label_cc.pack()
+
+        listbox_cc = tk.Listbox(resultado_window)
+        for cc in centros_custo:
+            listbox_cc.insert(tk.END, cc)
+        listbox_cc.pack()
+
+        # Exibir localizações não encontradas
+        label_loc = tk.Label(resultado_window, text="Localizações Não Encontradas")
+        label_loc.pack()
+
+        listbox_loc = tk.Listbox(resultado_window)
+        for loc in localizacoes:
+            listbox_loc.insert(tk.END, loc)
+        listbox_loc.pack()
+
+        # Botão para criar centros de custo ausentes
+        button_create_cc = tk.Button(resultado_window, text="Criar Centros de Custo", command=lambda: self.criar_registros_ausentes("CentroCusto", listbox_cc.get(0, tk.END)))
+        button_create_cc.pack(pady=10)
+
+        # Botão para criar localizações ausentes
+        button_create_loc = tk.Button(resultado_window, text="Criar Localizações", command=lambda: self.criar_registros_ausentes("Localizacao", listbox_loc.get(0, tk.END)))
+        button_create_loc.pack(pady=10)
 
 
     def choose_color(self, target):

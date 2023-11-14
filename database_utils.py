@@ -50,3 +50,28 @@ def verificar_todos_funcionarios(database, lista_funcionarios):
         if not verificar_funcionario(database, codigo, cpf):
             funcionarios_nao_encontrados.append(funcionario)
     return funcionarios_nao_encontrados
+
+def verificar_existencia(database, nome_tabela, descricao):
+    cursor = database.cursor()
+    query = f"SELECT codigo, descricao FROM {nome_tabela} WHERE descricao = ?"
+    cursor.execute(query, (descricao,))
+    resultado = cursor.fetchone()
+    return resultado[0] if resultado else None
+
+def obter_proximo_codigo(database, nome_tabela):
+    cursor = database.cursor()
+    query = f"SELECT MAX(codigo) FROM {nome_tabela}"
+    cursor.execute(query)
+    resultado = cursor.fetchone()
+    return resultado[0] + 1 if resultado[0] is not None else 1
+
+
+def criar_registro(database, nome_tabela, descricao):
+    novo_codigo = obter_proximo_codigo(database, nome_tabela)
+    try:
+        query = f"INSERT INTO {nome_tabela} (codigo, descricao) VALUES (?, ?)"
+        cursor = database.cursor()
+        cursor.execute(query, (novo_codigo, descricao))
+        database.commit()
+    except Exception as e:
+        print(f"Ocorreu um erro ao criar o registro em {nome_tabela}: {e}")
