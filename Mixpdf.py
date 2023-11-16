@@ -8,7 +8,7 @@ from style_interface import configure_treeview_style, button_style, label_style
 from update import check_for_updates, download_and_install_update
 import os
 import tkinter.colorchooser as colorchooser
-from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_registro
+from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro
 from eventos import extrair_e_categorizar_dados
 
 
@@ -31,6 +31,7 @@ class App:
         self.label_filename.configure(bg=self.color_preferences.get('background'))
         self.label_proventos = None
         self.label_descontos = None
+        self.database = None
         check_for_updates()
     
     def setup_ui(self):
@@ -114,9 +115,11 @@ class App:
     def verify_in_sql_server(self):
         selected_database = self.database_combobox.get()
         if selected_database:
+            self.database = criar_conexao_sql_server(selected_database)
             self.verificar_dados(selected_database)
         else:
             messagebox.showwarning("Aviso", "Por favor, selecione um banco de dados para verificar.")
+
 
     def verificar_dados(self, database):
         lista_funcionarios = self.df.to_dict('records')
@@ -146,57 +149,64 @@ class App:
 
         df_nao_encontrados = pd.DataFrame(funcionarios_nao_encontrados)
 
-        button_verify = tk.Button(new_window, text="Verificar Centro de Custo e Localização", command=lambda: self.verificar_e_criar_registros(funcionarios_nao_encontrados))
-        button_verify.pack(pady=10)
-
         button_save = tk.Button(new_window, text="Salvar em Excel", command=lambda: self.save_excel(df_nao_encontrados))
         button_save.pack(pady=10)
 
-    def verificar_e_criar_registros(self):
-        centros_custo_ausentes = set()
-        localizacoes_ausentes = set()
+        # Botão para verificar centros de custos
+        button_check_centro_custos = tk.Button(new_window, text="Verificar Centros de Custos", command=lambda: self.verificar_centros_custos_treeview(tree, 'centrocusto'))
+        button_check_centro_custos.pack(pady=10)
 
-        for funcionario in self.funcionarios_nao_encontrados:
-            if not verificar_existencia(self.database, "CentroCusto", funcionario["CentroCusto"]):
-                centros_custo_ausentes.add(funcionario["CentroCusto"])
-
-            if not verificar_existencia(self.database, "Localizacao", funcionario["Localizacao"]):
-                localizacoes_ausentes.add(funcionario["Localizacao"])
-
-        if centros_custo_ausentes or localizacoes_ausentes:
-            self.mostrar_resultados_e_perguntar_criacao(centros_custo_ausentes, localizacoes_ausentes)
-        else:
-            messagebox.showinfo("Verificação", "Todos os centros de custo e localizações foram encontrados.")
     
-    def mostrar_resultados_e_perguntar_criacao(self, centros_custo, localizacoes):
-        resultado_window = tk.Toplevel(self.root)
-        resultado_window.title("Resultados da Verificação")
+    def verificar_centros_custos_treeview(self, tree, nome_tabela):
+        centros_custos_unicos = set()
+        centros_custos_nao_existentes = []
 
-        # Exibir centros de custo não encontrados
-        label_cc = tk.Label(resultado_window, text="Centros de Custo Não Encontrados")
-        label_cc.pack()
+        # Coletar centros de custos únicos
+        for item in tree.get_children():
+            descricao_centro_custos = tree.item(item, 'values')[2]
+            centros_custos_unicos.add(descricao_centro_custos)
 
-        listbox_cc = tk.Listbox(resultado_window)
-        for cc in centros_custo:
-            listbox_cc.insert(tk.END, cc)
-        listbox_cc.pack()
+        # Verificar cada centro de custo único
+        for centro in centros_custos_unicos:
+            existe = verificar_existencia(self.database, nome_tabela, centro)
+            if not existe:
+                centros_custos_nao_existentes.append(centro)
+        self.mostrar_centros_custos_nao_existentes(centros_custos_nao_existentes)
 
-        # Exibir localizações não encontradas
-        label_loc = tk.Label(resultado_window, text="Localizações Não Encontradas")
-        label_loc.pack()
+    def mostrar_centros_custos_nao_existentes(self, centros_custos_nao_existentes):
+        # Verifica se a lista está vazia e, em caso afirmativo, exibe uma mensagem
+        if not centros_custos_nao_existentes:
+            tk.messagebox.showinfo("Verificação completa", "Todos os centros de custos listados existem no banco de dados.")
+            return
 
-        listbox_loc = tk.Listbox(resultado_window)
-        for loc in localizacoes:
-            listbox_loc.insert(tk.END, loc)
-        listbox_loc.pack()
+        # Cria uma nova janela
+        new_window = tk.Toplevel(self.root)
+        new_window.title("Centros de Custos não existentes")
 
-        # Botão para criar centros de custo ausentes
-        button_create_cc = tk.Button(resultado_window, text="Criar Centros de Custo", command=lambda: self.criar_registros_ausentes("CentroCusto", listbox_cc.get(0, tk.END)))
-        button_create_cc.pack(pady=10)
+        # Cria um scrollbar
+        scrollbar = tk.Scrollbar(new_window)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Botão para criar localizações ausentes
-        button_create_loc = tk.Button(resultado_window, text="Criar Localizações", command=lambda: self.criar_registros_ausentes("Localizacao", listbox_loc.get(0, tk.END)))
-        button_create_loc.pack(pady=10)
+        # Cria uma Listbox e associa ao scrollbar
+        listbox = tk.Listbox(new_window, yscrollcommand=scrollbar.set)
+        for centro in centros_custos_nao_existentes:
+            listbox.insert(tk.END, centro)
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        btn_adicionar = tk.Button(new_window, text="Adicionar ao Banco de Dados", command=lambda: self.adicionar_centros_custos(centros_custos_nao_existentes))
+        btn_adicionar.pack(pady=10)
+
+        # Configura o scrollbar para funcionar com a Listbox
+        scrollbar.config(command=listbox.yview)
+
+    def adicionar_centros_custos(self, centros_custos_nao_existentes):
+        nome_tabela = 'centrocusto'
+
+        for descricao in centros_custos_nao_existentes:
+            try:
+                criar_registro(self.database, nome_tabela, descricao)
+            except Exception as e:
+                print(f"Erro ao adicionar descrição '{descricao}'. Erro: {e}")
 
 
     def choose_color(self, target):

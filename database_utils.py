@@ -63,15 +63,18 @@ def obter_proximo_codigo(database, nome_tabela):
     query = f"SELECT MAX(codigo) FROM {nome_tabela}"
     cursor.execute(query)
     resultado = cursor.fetchone()
-    return resultado[0] + 1 if resultado[0] is not None else 1
+    return (int(resultado[0]) + 1) if resultado and resultado[0] is not None else 1
 
 
 def criar_registro(database, nome_tabela, descricao):
     novo_codigo = obter_proximo_codigo(database, nome_tabela)
-    try:
-        query = f"INSERT INTO {nome_tabela} (codigo, descricao) VALUES (?, ?)"
-        cursor = database.cursor()
-        cursor.execute(query, (novo_codigo, descricao))
-        database.commit()
-    except Exception as e:
-        print(f"Ocorreu um erro ao criar o registro em {nome_tabela}: {e}")
+    novo_codigo_str = str(novo_codigo) 
+    query = f"INSERT INTO {nome_tabela} (codigo, descricao) VALUES (?, ?)"
+    cursor = database.cursor()
+    cursor.execute(query, (novo_codigo_str, descricao))
+    database.commit()
+
+
+
+
+
