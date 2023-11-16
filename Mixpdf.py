@@ -135,69 +135,82 @@ class App:
         new_window = tk.Toplevel(self.root)
         new_window.title("Funcionários não encontrados")
 
-        # Cria um Treeview na nova janela
         tree = ttk.Treeview(new_window, columns=list(funcionarios_nao_encontrados[0].keys()), show='headings')
         tree.pack(expand=True, fill='both', padx=10, pady=10)
 
-        # Adiciona as colunas ao Treeview
         for col in funcionarios_nao_encontrados[0].keys():
             tree.heading(col, text=col)
 
-        # Insere os dados no Treeview
         for funcionario in funcionarios_nao_encontrados:
             tree.insert('', 'end', values=list(funcionario.values()))
 
         df_nao_encontrados = pd.DataFrame(funcionarios_nao_encontrados)
 
-        button_save = tk.Button(new_window, text="Salvar em Excel", command=lambda: self.save_excel(df_nao_encontrados))
-        button_save.pack(pady=10)
+        button_save = tk.Button(new_window, text="Salvar em Excel", command=lambda: self.save_excel(df_nao_encontrados, tree))
+        button_save.pack(side=tk.LEFT, padx=10)
 
-        # Botão para verificar centros de custos
-        button_check_centro_custos = tk.Button(new_window, text="Verificar Centros de Custos", command=lambda: self.verificar_centros_custos_treeview(tree, 'centrocusto'))
-        button_check_centro_custos.pack(pady=10)
+        button_check_centro_custos = tk.Button(new_window, text="Verificar Centros de Custos", command=lambda: self.verificar_centros_custos_e_secretarias_treeview(tree, 'centrocusto', 'localizacao'))
+        button_check_centro_custos.pack(side=tk.LEFT, padx=10)
 
+        button_update = tk.Button(new_window, text="Atualizar Descrições", command=lambda: self.atualizar_descricoes_por_codigos(tree))
+        button_update.pack(side=tk.LEFT, padx=10)
     
-    def verificar_centros_custos_treeview(self, tree, nome_tabela):
+    def verificar_centros_custos_e_secretarias_treeview(self, tree, nome_tabela_centro_custos, nome_tabela_secretaria):
         centros_custos_unicos = set()
+        secretarias_unicas = set()
         centros_custos_nao_existentes = []
+        secretarias_nao_existentes = []
 
-        # Coletar centros de custos únicos
+        # Coletar centros de custos e secretarias únicos
         for item in tree.get_children():
-            descricao_centro_custos = tree.item(item, 'values')[2]
+            valores = tree.item(item, 'values')
+            descricao_centro_custos = valores[2]  # Coluna do centro de custos
+            descricao_secretaria = valores[3]     # Coluna da secretaria
             centros_custos_unicos.add(descricao_centro_custos)
+            secretarias_unicas.add(descricao_secretaria)
 
-        # Verificar cada centro de custo único
+        # Verificar cada centro de custo e secretaria únicos
         for centro in centros_custos_unicos:
-            existe = verificar_existencia(self.database, nome_tabela, centro)
-            if not existe:
+            if not verificar_existencia(self.database, nome_tabela_centro_custos, centro):
                 centros_custos_nao_existentes.append(centro)
-        self.mostrar_centros_custos_nao_existentes(centros_custos_nao_existentes)
+        
+        for secretaria in secretarias_unicas:
+            if not verificar_existencia(self.database, nome_tabela_secretaria, secretaria):
+                secretarias_nao_existentes.append(secretaria)
 
-    def mostrar_centros_custos_nao_existentes(self, centros_custos_nao_existentes):
-        # Verifica se a lista está vazia e, em caso afirmativo, exibe uma mensagem
-        if not centros_custos_nao_existentes:
-            tk.messagebox.showinfo("Verificação completa", "Todos os centros de custos listados existem no banco de dados.")
-            return
+        # Chame funções para mostrar os centros de custos e secretarias não existentes
+        self.mostrar_centros_custos_e_secretarias_nao_existentes(centros_custos_nao_existentes, secretarias_nao_existentes)
 
-        # Cria uma nova janela
+    def mostrar_centros_custos_e_secretarias_nao_existentes(self, centros_custos_nao_existentes, secretarias_nao_existentes):
         new_window = tk.Toplevel(self.root)
-        new_window.title("Centros de Custos não existentes")
+        new_window.title("Centros de Custos e Secretarias não existentes")
 
-        # Cria um scrollbar
-        scrollbar = tk.Scrollbar(new_window)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        frame_centro_custos = tk.Frame(new_window)
+        frame_secretarias = tk.Frame(new_window)
+        frame_centro_custos.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        frame_secretarias.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        # Cria uma Listbox e associa ao scrollbar
-        listbox = tk.Listbox(new_window, yscrollcommand=scrollbar.set)
+        label_cc = tk.Label(frame_centro_custos, text="Centros de Custos não existentes")
+        label_cc.pack()
+        label_sec = tk.Label(frame_secretarias, text="Secretarias não existentes")
+        label_sec.pack()
+
+        listbox_cc = tk.Listbox(frame_centro_custos)
         for centro in centros_custos_nao_existentes:
-            listbox.insert(tk.END, centro)
-        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            listbox_cc.insert(tk.END, centro)
+        listbox_cc.pack(fill=tk.BOTH, expand=True)
 
-        btn_adicionar = tk.Button(new_window, text="Adicionar ao Banco de Dados", command=lambda: self.adicionar_centros_custos(centros_custos_nao_existentes))
-        btn_adicionar.pack(pady=10)
+        listbox_sec = tk.Listbox(frame_secretarias)
+        for secretaria in secretarias_nao_existentes:
+            listbox_sec.insert(tk.END, secretaria)
+        listbox_sec.pack(fill=tk.BOTH, expand=True)
 
-        # Configura o scrollbar para funcionar com a Listbox
-        scrollbar.config(command=listbox.yview)
+        btn_adicionar_cc = tk.Button(frame_centro_custos, text="Adicionar Centros de Custos", command=lambda: self.adicionar_centros_custos(centros_custos_nao_existentes))
+        btn_adicionar_cc.pack(pady=10)
+
+        btn_adicionar_sec = tk.Button(frame_secretarias, text="Adicionar Secretarias", command=lambda: self.adicionar_secretarias(secretarias_nao_existentes))
+        btn_adicionar_sec.pack(pady=10)
+
 
     def adicionar_centros_custos(self, centros_custos_nao_existentes):
         nome_tabela = 'centrocusto'
@@ -208,7 +221,33 @@ class App:
             except Exception as e:
                 print(f"Erro ao adicionar descrição '{descricao}'. Erro: {e}")
 
+    def adicionar_secretarias(self, secretarias_nao_existentes):
+        nome_tabela = 'localizacao'
 
+        for descricao in secretarias_nao_existentes:
+            try:
+                criar_registro(self.database, nome_tabela, descricao)
+            except Exception as e:
+                messagebox.showerror("Erro", f"Erro ao adicionar secretaria '{descricao}'. Erro: {e}")
+    
+    def atualizar_descricoes_por_codigos(self, tree):
+        for item in tree.get_children():
+            valores = tree.item(item, 'values')
+            descricao_centro_custos = valores[2]
+            descricao_secretaria = valores[3]
+
+            codigo_centro_custos = verificar_existencia(self.database, 'centrocusto', descricao_centro_custos)
+            codigo_secretaria = verificar_existencia(self.database, 'localizacao', descricao_secretaria)
+
+            # Atualiza os valores na Treeview
+            novos_valores = list(valores)
+            if codigo_centro_custos:
+                novos_valores[2] = codigo_centro_custos
+            if codigo_secretaria:
+                novos_valores[3] = codigo_secretaria
+
+            tree.item(item, values=novos_valores)
+  
     def choose_color(self, target):
         color_code = colorchooser.askcolor(title="Escolha a cor", initialcolor=self.color_preferences.get(target))
         if color_code[1] is not None:
@@ -560,7 +599,6 @@ class App:
         for row in self.tree.get_children():
             self.tree.delete(row)
 
-        # Atualizar as colunas do Treeview com base nos dados
         self.tree["columns"] = list(self.df.columns)
 
         # Definindo zebra stripping
@@ -579,9 +617,17 @@ class App:
         self.tree.tag_configure('evenrow', background=even_color)
         self.tree.tag_configure('oddrow', background=odd_color)
 
-    def save_excel(self, df=None):
+    def save_excel(self, df=None, tree=None):
         if df is None:
             df = self.df
+
+        if tree is not None:
+            novos_dados = []
+            for item in tree.get_children():
+                valores = tree.item(item, 'values')
+                novos_dados.append(valores)
+
+            df = pd.DataFrame(novos_dados, columns=df.columns)
 
         excel_filename = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Arquivos XLSX", "*.xlsx")])
         if excel_filename:
@@ -597,7 +643,6 @@ class App:
             self.excel_filename = excel_filename
             self.button_open_excel.config(state=tk.NORMAL)
             messagebox.showinfo("Sucesso", "Dados salvos com sucesso!")
-
 
     def open_excel(self):
         if self.excel_filename:

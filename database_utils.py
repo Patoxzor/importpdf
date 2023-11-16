@@ -74,7 +74,13 @@ def criar_registro(database, nome_tabela, descricao):
     cursor.execute(query, (novo_codigo_str, descricao))
     database.commit()
 
-
-
-
-
+def obter_codigo_e_descricao(self, nome_tabela, descricao):
+    try:
+        cursor = self.database.cursor()
+        query = f"SELECT codigo, descricao FROM {nome_tabela} WHERE descricao = ?"
+        cursor.execute(query, (descricao,))
+        resultado = cursor.fetchone()
+        return resultado if resultado else (None, None)
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao obter código e descrição: {e}")
+        return None, None
