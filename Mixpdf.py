@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
 import pandas as pd
+from decimal import Decimal, InvalidOperation
 from data_func import extrair_dados_pdf
 from excel_format import formatar_cabecalho, formatar_cpf, ajustar_largura_colunas, adicionar_bordas, remover_gridlines
 from config_json import ConfigManager
@@ -8,7 +9,7 @@ from style_interface import configure_treeview_style, button_style, label_style
 from update import check_for_updates, download_and_install_update
 import os
 import tkinter.colorchooser as colorchooser
-from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro, buscar_empresa_por_descricao
+from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro, buscar_empresa_por_descricao, verificar_cargo_e_salario
 from eventos import extrair_e_categorizar_dados
 
 
@@ -64,7 +65,6 @@ class App:
                                     parent=self.root)
         if response:
             download_and_install_update(download_url, latest_version)
-
 
     def create_buttons(self):
         style = button_style()
@@ -130,26 +130,43 @@ class App:
         else:
             messagebox.showinfo("Verificação", "Todos os funcionários foram encontrados no banco de dados.")
 
-
     def mostrar_funcionarios_nao_encontrados(self, funcionarios_nao_encontrados):
         new_window = tk.Toplevel(self.root)
         new_window.title("Funcionários não encontrados")
 
-        tree = ttk.Treeview(new_window, columns=list(funcionarios_nao_encontrados[0].keys()), show='headings')
-        tree.pack(expand=True, fill='both', padx=10, pady=10)
+        container = tk.Frame(new_window)
+        container.pack(fill='both', expand=True)
+
+        vsb = ttk.Scrollbar(container, orient="vertical")
+        vsb.pack(side='right', fill='y')
+
+        hsb = ttk.Scrollbar(container, orient="horizontal")
+        hsb.pack(side='bottom', fill='x')
+
+        tree = ttk.Treeview(container, columns=list(funcionarios_nao_encontrados[0].keys()), show='headings',
+                            yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        tree.pack(side='top', fill='both', expand=True)
+
+        vsb.config(command=tree.yview)
+        hsb.config(command=tree.xview)
 
         for col in funcionarios_nao_encontrados[0].keys():
             tree.heading(col, text=col)
+            tree.column(col, anchor='w') 
 
         for funcionario in funcionarios_nao_encontrados:
             tree.insert('', 'end', values=list(funcionario.values()))
+
+        # Configura a largura das colunas, se necessário
+        for col in tree['columns']:
+            tree.column(col, width=100, minwidth=50)
 
         df_nao_encontrados = pd.DataFrame(funcionarios_nao_encontrados)
 
         button_save = tk.Button(new_window, text="Salvar em Excel", command=lambda: self.save_excel(tree))
         button_save.pack(side=tk.LEFT, padx=10)
 
-        button_check_centro_custos = tk.Button(new_window, text="Verificar Centros de Custos", command=lambda: self.verificar_centros_custos_e_secretarias_treeview(tree, 'centrocusto', 'localizacao'))
+        button_check_centro_custos = tk.Button(new_window, text="Verificar Dados", command=lambda: self.verificar_centros_custos_e_secretarias_treeview(tree, 'centrocusto', 'localizacao'))
         button_check_centro_custos.pack(side=tk.LEFT, padx=10)
 
         button_update = tk.Button(new_window, text="Atualizar Descrições", command=lambda: self.atualizar_descricoes_por_codigos(tree))
@@ -163,10 +180,93 @@ class App:
         button_add_empresa = tk.Button(new_window, text="Adicionar Códigos de Empresa", command=lambda: self.adicionar_coluna_codigo_empresa(tree, self.database, 'empresas'))
         button_add_empresa.pack(side=tk.LEFT, padx=10)
 
+        button_update_vinculo = tk.Button(new_window, text="Atualizar Vínculo", command=lambda: self.atualizar_vinculo(tree))
+        button_update_vinculo.pack(side=tk.LEFT, padx=10)
+
+        new_window.minsize(600, 400)
+
+        def search_treeview(search_query, start_node=None, reverse=False):
+            children = tree.get_children()
+            start_index = 0
+            if start_node:
+                start_index = children.index(start_node) - 1 if reverse else children.index(start_node) + 1
+            else:
+                start_index = len(children) - 1 if reverse else 0
+
+            search_range = range(start_index, -1, -1) if reverse else range(start_index, len(children))
+
+            for i in search_range:
+                if search_query.lower() in str(tree.item(children[i], 'values')).lower():
+                    tree.see(children[i])
+                    tree.selection_set(children[i])
+                    return children[i]
+
+            return None 
+
+        def open_search_box():
+            search_window = tk.Toplevel(new_window)
+            search_window.title("Pesquisar")
+            search_window.grab_set() 
+            search_window.focus_set() 
+
+            search_label = tk.Label(search_window, text="Procurar:")
+            search_label.pack(side=tk.LEFT)
+            search_entry = tk.Entry(search_window)
+            search_entry.pack(side=tk.LEFT, padx=5)
+            search_entry.focus_set() 
+
+            def find_next():
+                selected = tree.selection()
+                search_treeview(search_entry.get(), selected[0] if selected else None)
+
+            def find_previous():
+                selected = tree.selection()
+                search_treeview(search_entry.get(), selected[0] if selected else None, reverse=True)
+
+            def on_search_entry_event(event):
+                if event.keysym == 'Return' and event.state & (1 << 0):  # Verifica se o Shift está pressionado
+                    find_previous()
+                elif event.keysym == 'Return':
+                    find_next()
+                elif event.keysym == 'Escape':
+                    search_window.destroy()
+
+            search_entry.bind('<Return>', on_search_entry_event)
+            search_entry.bind('<Escape>', on_search_entry_event)
+
+            search_button_next = tk.Button(search_window, text="Próximo", command=find_next)
+            search_button_next.pack(side=tk.LEFT)
+
+            search_button_previous = tk.Button(search_window, text="Anterior", command=find_previous)
+            search_button_previous.pack(side=tk.LEFT)
+
+        new_window.bind('<Control-f>', lambda event: open_search_box())
+    
+    def atualizar_vinculo(self,tree):
+        indice_coluna_vinculo = 8
+        for item in tree.get_children():
+            valores = list(tree.item(item, 'values'))
+            if valores[indice_coluna_vinculo] == '30 - Regime Juídico Vinculado a Regime Próprio':
+                valores[indice_coluna_vinculo] = '1'
+            elif valores[indice_coluna_vinculo] == '45 - Comissão':
+                valores[indice_coluna_vinculo] = '2'
+            elif valores[indice_coluna_vinculo] == '65 - Contrato Temporário':
+                valores[indice_coluna_vinculo] = '3'
+            elif valores[indice_coluna_vinculo] == '35 - Servidor Público Não Efetivo':
+                valores[indice_coluna_vinculo] = '4'
+            elif valores[indice_coluna_vinculo] == '55 - Prestação de Serviços':
+                valores[indice_coluna_vinculo] = '5'
+            elif valores[indice_coluna_vinculo] == '90 - Estatutário':
+                valores[indice_coluna_vinculo] = '6'
+            elif valores[indice_coluna_vinculo] == '50 - Temporário':
+                valores[indice_coluna_vinculo] = '8'
+            else:
+                valores[indice_coluna_vinculo] = None
+            tree.item(item, values=valores)
     
     def adicionar_coluna_codigo_empresa(self, tree, database, nome_tabela):
         nome_tabela = 'empresas'
-        coluna_empresa = "Codigo Empresa"
+        coluna_empresa = "Empresa"
         colunas_atuais = list(tree["columns"])
 
         # Adiciona a nova coluna se ainda não existir
@@ -191,7 +291,6 @@ class App:
                 valores[-1] = codigo_empresa
 
             tree.item(item, values=valores)
-
 
     def extrair_descricao_para_busca(self, descricao):
         palavras_chave = ["educacao", "saude", "assistencia"]      
@@ -248,57 +347,97 @@ class App:
     def verificar_centros_custos_e_secretarias_treeview(self, tree, nome_tabela_centro_custos, nome_tabela_secretaria):
         centros_custos_unicos = set()
         secretarias_unicas = set()
+        combinacoes_nao_existentes = set()  # Inicialize apenas como um conjunto
         centros_custos_nao_existentes = []
         secretarias_nao_existentes = []
 
         for item in tree.get_children():
             valores = tree.item(item, 'values')
-            descricao_centro_custos = valores[2] 
-            descricao_secretaria = valores[3]  
+            descricao_centro_custos = valores[2]
+            descricao_secretaria = valores[3]
+            cargo = valores[4] 
+            salario_valor = valores[-1]
+
+            salario_valor_formatado = salario_valor.replace('.', '').replace(',', '.')
+
+            try:
+                salario_valor_decimal = Decimal(salario_valor_formatado).quantize(Decimal('0.00'))
+            except InvalidOperation as e:
+                messagebox.showerror("Erro", f"Valor de salário inválido: {salario_valor}")
+                continue
+
             centros_custos_unicos.add(descricao_centro_custos)
             secretarias_unicas.add(descricao_secretaria)
 
-        # Verificar cada centro de custo e secretaria únicos
+            resultado = verificar_cargo_e_salario(self.database, cargo, salario_valor_decimal)
+            print("Resultado da verificação de cargo e salário:", resultado)
+            if resultado:  # Adiciona a combinação se não for encontrada no banco de dados
+                combinacao = f"{cargo} - {salario_valor}"
+                combinacoes_nao_existentes.add(combinacao)
+                print("Combinacao adicionada:", combinacao)
+
         for centro in centros_custos_unicos:
             if not verificar_existencia(self.database, nome_tabela_centro_custos, centro):
                 centros_custos_nao_existentes.append(centro)
-        
+            
         for secretaria in secretarias_unicas:
             if not verificar_existencia(self.database, nome_tabela_secretaria, secretaria):
                 secretarias_nao_existentes.append(secretaria)
 
-        self.mostrar_centros_custos_e_secretarias_nao_existentes(centros_custos_nao_existentes, secretarias_nao_existentes)
+        print("Combinacoes não existentes antes de mostrar:", combinacoes_nao_existentes)
+        self.mostrar_dados_nao_existentes(centros_custos_nao_existentes, secretarias_nao_existentes, combinacoes_nao_existentes)
 
-    def mostrar_centros_custos_e_secretarias_nao_existentes(self, centros_custos_nao_existentes, secretarias_nao_existentes):
+
+
+    def mostrar_dados_nao_existentes(self, centros_custos_nao_existentes, secretarias_nao_existentes, combinacoes_nao_existentes):
+        print("Combinacoes não existentes recebidas:", combinacoes_nao_existentes)
         new_window = tk.Toplevel(self.root)
-        new_window.title("Centros de Custos e Secretarias não existentes")
+        new_window.title("Dados não existentes")
 
         frame_centro_custos = tk.Frame(new_window)
         frame_secretarias = tk.Frame(new_window)
-        frame_centro_custos.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        frame_secretarias.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        frame_combinacoes = tk.Frame(new_window)
 
+        frame_centro_custos.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        frame_secretarias.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        frame_combinacoes.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Adicione labels e listboxes para centros de custos
         label_cc = tk.Label(frame_centro_custos, text="Centros de Custos não existentes")
         label_cc.pack()
-        label_sec = tk.Label(frame_secretarias, text="Secretarias não existentes")
-        label_sec.pack()
-
         listbox_cc = tk.Listbox(frame_centro_custos)
         for centro in centros_custos_nao_existentes:
             listbox_cc.insert(tk.END, centro)
         listbox_cc.pack(fill=tk.BOTH, expand=True)
 
+        # Adicione labels e listboxes para secretarias
+        label_sec = tk.Label(frame_secretarias, text="Secretarias não existentes")
+        label_sec.pack()
         listbox_sec = tk.Listbox(frame_secretarias)
         for secretaria in secretarias_nao_existentes:
             listbox_sec.insert(tk.END, secretaria)
         listbox_sec.pack(fill=tk.BOTH, expand=True)
 
+        label_combinacoes = tk.Label(frame_combinacoes, text="Combinações de Cargos e Salários não existentes")
+        label_combinacoes.pack()
+        listbox_combinacoes = tk.Listbox(frame_combinacoes)
+        for combinacao in combinacoes_nao_existentes:
+            listbox_combinacoes.insert(tk.END, combinacao)
+        listbox_combinacoes.pack(fill=tk.BOTH, expand=True)
+
+        # Adicione botões para adicionar centros de custos e secretarias
         btn_adicionar_cc = tk.Button(frame_centro_custos, text="Adicionar Centros de Custos", command=lambda: self.adicionar_centros_custos(centros_custos_nao_existentes))
         btn_adicionar_cc.pack(pady=10)
 
         btn_adicionar_sec = tk.Button(frame_secretarias, text="Adicionar Secretarias", command=lambda: self.adicionar_secretarias(secretarias_nao_existentes))
         btn_adicionar_sec.pack(pady=10)
 
+        # Botão para adicionar combinações de cargos e salários
+        btn_adicionar_combinacoes = tk.Button(frame_combinacoes, text="Adicionar Combinações", command=lambda: self.adicionar_combinacoes(combinacoes_nao_existentes))
+        btn_adicionar_combinacoes.pack(pady=10)
+
+        new_window.minsize(800, 400) 
+       
 
     def adicionar_centros_custos(self, centros_custos_nao_existentes):
         nome_tabela = 'centrocusto'
