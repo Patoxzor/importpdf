@@ -94,4 +94,35 @@ def buscar_empresa_por_descricao(database, nome_tabela, descricao):
     resultado = cursor.fetchone()
     return resultado[0] if resultado else None
 
+def verificar_cargo_e_salario(database, cargo, salario_valor):
+    try:
+        # Imprimir os valores recebidos
+       # print("Verificando cargo e salário:", cargo, salario_valor)
+
+        cursor = database.cursor()
+        descricao_like = f'{cargo}'
+        query = "SELECT codigo, descricao, faixasalarial FROM funcoes WHERE descricao = ? AND faixasalarial = ?"
+        
+        # Imprimir a consulta SQL
+        #print("Executando consulta SQL:", query, "com", cargo, salario_valor)
+
+        cursor.execute(query, (descricao_like, salario_valor))
+        resultado = cursor.fetchone()
+
+        # Imprimir o resultado da consulta
+        if resultado:
+            print("Resultado encontrado:", resultado)
+        else:
+            print("Nenhum resultado encontrado.")
+
+        # Se o resultado for None, o cargo com essa faixa salarial não existe
+        return resultado is None
+    except ValueError as ve:
+        messagebox.showerror("Erro", f"Valor de salário inválido: {ve}")
+        return False
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao verificar cargo e salário: {e}")
+        return False
+
+
 
