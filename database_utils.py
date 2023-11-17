@@ -84,3 +84,14 @@ def obter_codigo_e_descricao(self, nome_tabela, descricao):
     except Exception as e:
         messagebox.showerror("Erro", f"Erro ao obter código e descrição: {e}")
         return None, None
+
+def buscar_empresa_por_descricao(database, nome_tabela, descricao):
+    cursor = database.cursor()
+    descricao_like = f"%{descricao}%"
+    # Alterando 'descricao' para 'razaosocial' na consulta
+    query = f"SELECT codigo, razaosocial FROM {nome_tabela} WHERE razaosocial LIKE ?"
+    cursor.execute(query, (descricao_like,))
+    resultado = cursor.fetchone()
+    return resultado[0] if resultado else None
+
+

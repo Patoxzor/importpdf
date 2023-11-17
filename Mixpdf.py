@@ -8,7 +8,7 @@ from style_interface import configure_treeview_style, button_style, label_style
 from update import check_for_updates, download_and_install_update
 import os
 import tkinter.colorchooser as colorchooser
-from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro
+from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro, buscar_empresa_por_descricao
 from eventos import extrair_e_categorizar_dados
 
 
@@ -146,7 +146,7 @@ class App:
 
         df_nao_encontrados = pd.DataFrame(funcionarios_nao_encontrados)
 
-        button_save = tk.Button(new_window, text="Salvar em Excel", command=lambda: self.save_excel(df_nao_encontrados, tree))
+        button_save = tk.Button(new_window, text="Salvar em Excel", command=lambda: self.save_excel(tree))
         button_save.pack(side=tk.LEFT, padx=10)
 
         button_check_centro_custos = tk.Button(new_window, text="Verificar Centros de Custos", command=lambda: self.verificar_centros_custos_e_secretarias_treeview(tree, 'centrocusto', 'localizacao'))
@@ -154,18 +154,107 @@ class App:
 
         button_update = tk.Button(new_window, text="Atualizar Descrições", command=lambda: self.atualizar_descricoes_por_codigos(tree))
         button_update.pack(side=tk.LEFT, padx=10)
+
+        tree.bind("<Double-1>", lambda event: self.on_item_double_click(event, tree))
+
+        button_add_column = tk.Button(new_window, text="Adicionar Coluna", command=lambda: self.add_column(tree))
+        button_add_column.pack(side=tk.LEFT, padx=10)
+
+        button_add_empresa = tk.Button(new_window, text="Adicionar Códigos de Empresa", command=lambda: self.adicionar_coluna_codigo_empresa(tree, self.database, 'empresas'))
+        button_add_empresa.pack(side=tk.LEFT, padx=10)
+
     
+    def adicionar_coluna_codigo_empresa(self, tree, database, nome_tabela):
+        nome_tabela = 'empresas'
+        coluna_empresa = "Codigo Empresa"
+        colunas_atuais = list(tree["columns"])
+
+        # Adiciona a nova coluna se ainda não existir
+        if coluna_empresa not in colunas_atuais:
+            colunas_atualizadas = colunas_atuais + [coluna_empresa]
+            tree.configure(columns=colunas_atualizadas)
+
+            for coluna in colunas_atualizadas:
+                tree.heading(coluna, text=coluna)
+                tree.column(coluna, width=100) 
+
+        for item in tree.get_children():
+            valores = list(tree.item(item, 'values'))
+            descricao_secretaria = valores[3] 
+
+            descricao_para_busca = self.extrair_descricao_para_busca(descricao_secretaria)
+            codigo_empresa = buscar_empresa_por_descricao(database, nome_tabela, descricao_para_busca)
+            
+            if len(valores) < len(colunas_atualizadas):
+                valores.append(codigo_empresa)
+            else:
+                valores[-1] = codigo_empresa
+
+            tree.item(item, values=valores)
+
+
+    def extrair_descricao_para_busca(self, descricao):
+        palavras_chave = ["educacao", "saude", "assistencia"]      
+        descricao_lower = descricao.lower()
+
+        # Verificando cada palavra-chave na descrição
+        for palavra in palavras_chave:
+            if palavra in descricao_lower:
+                return palavra
+
+        return "prefeitura"
+
+    def add_column(self, tree):
+        column_name = simpledialog.askstring("Nova Coluna", "Digite o nome da nova coluna:")
+        if column_name:
+            current_columns = list(tree["columns"])
+
+            if column_name in current_columns:
+                messagebox.showwarning("Aviso", "Esta coluna já existe.")
+                return
+
+            updated_columns = current_columns + [column_name]
+
+            tree.configure(columns=updated_columns)
+
+            for col in updated_columns:
+                tree.heading(col, text=col)
+
+            tree.column(column_name, width=100)
+
+    def on_item_double_click(self, event, tree):
+        item = tree.identify('item', event.x, event.y)
+        column = tree.identify_column(event.x)
+        col_index = int(column[1:]) - 1 
+
+        # Obtendo o valor atual da célula, lidando com índices fora do alcance para novas colunas
+        try:
+            current_value = tree.item(item, 'values')[col_index]
+        except IndexError:
+            current_value = ""
+
+        # Diálogo para novo valor
+        new_value = simpledialog.askstring("Editar Célula", "Editar:", initialvalue=current_value)
+        if new_value is not None:
+            values = list(tree.item(item, 'values'))
+            
+            # Se a célula for de uma nova coluna, expandir a lista de valores
+            if len(values) <= col_index:
+                values.extend([None] * (col_index - len(values) + 1))
+
+            values[col_index] = new_value
+            tree.item(item, values=values)
+ 
     def verificar_centros_custos_e_secretarias_treeview(self, tree, nome_tabela_centro_custos, nome_tabela_secretaria):
         centros_custos_unicos = set()
         secretarias_unicas = set()
         centros_custos_nao_existentes = []
         secretarias_nao_existentes = []
 
-        # Coletar centros de custos e secretarias únicos
         for item in tree.get_children():
             valores = tree.item(item, 'values')
-            descricao_centro_custos = valores[2]  # Coluna do centro de custos
-            descricao_secretaria = valores[3]     # Coluna da secretaria
+            descricao_centro_custos = valores[2] 
+            descricao_secretaria = valores[3]  
             centros_custos_unicos.add(descricao_centro_custos)
             secretarias_unicas.add(descricao_secretaria)
 
@@ -178,7 +267,6 @@ class App:
             if not verificar_existencia(self.database, nome_tabela_secretaria, secretaria):
                 secretarias_nao_existentes.append(secretaria)
 
-        # Chame funções para mostrar os centros de custos e secretarias não existentes
         self.mostrar_centros_custos_e_secretarias_nao_existentes(centros_custos_nao_existentes, secretarias_nao_existentes)
 
     def mostrar_centros_custos_e_secretarias_nao_existentes(self, centros_custos_nao_existentes, secretarias_nao_existentes):
@@ -617,22 +705,25 @@ class App:
         self.tree.tag_configure('evenrow', background=even_color)
         self.tree.tag_configure('oddrow', background=odd_color)
 
-    def save_excel(self, df=None, tree=None):
-        if df is None:
-            df = self.df
-
+    def save_excel(self, tree=None):
         if tree is not None:
+            # Atualizando as colunas do DataFrame para corresponder às da TreeView
+            colunas_treeview = tree["columns"]
             novos_dados = []
+
             for item in tree.get_children():
                 valores = tree.item(item, 'values')
                 novos_dados.append(valores)
 
-            df = pd.DataFrame(novos_dados, columns=df.columns)
+            # Criando um novo DataFrame com os dados da TreeView
+            df_atualizado = pd.DataFrame(novos_dados, columns=colunas_treeview)
+        else:
+            df_atualizado = self.df
 
         excel_filename = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Arquivos XLSX", "*.xlsx")])
         if excel_filename:
             with pd.ExcelWriter(excel_filename, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False, sheet_name='Planilha')
+                df_atualizado.to_excel(writer, index=False, sheet_name='Planilha')
                 planilha = writer.sheets['Planilha']
 
                 formatar_cabecalho(planilha)
@@ -643,6 +734,7 @@ class App:
             self.excel_filename = excel_filename
             self.button_open_excel.config(state=tk.NORMAL)
             messagebox.showinfo("Sucesso", "Dados salvos com sucesso!")
+
 
     def open_excel(self):
         if self.excel_filename:
