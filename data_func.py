@@ -16,6 +16,7 @@ def extrair_cadastro(text, codigos_proventos, codigos_desconto):
         'cpf': r'CPF/AG-C.C: (.*) /',
         'ag': r'AG: (\d+)',
         'cc': r'CC: (\d+)',
+        'vinculo': r'VÍNCULO E.: (.*?) ADMISSÃO',
         'admissao': r'ADMISSÃO: (.*) Nascimento',
         'nascimento': r'Nascimento:\s*(\d{2}/\d{2}/\d{4})',
     }
@@ -65,7 +66,7 @@ def extrair_dados_pdf(f, codigos_proventos, codigos_desconto, mapeamento_codigos
         for section in sections[1:]:
             data.append(extrair_cadastro('FUNCIONÁRIO:' + section, codigos_proventos, codigos_desconto))
 
-    df = pd.DataFrame(data, columns=['Codigo', 'Nome', 'Centro C.', 'Secretaria', 'Cargo', 'CPF', 'AG', 'CC', 'Admissão', 'Nascimento'] +
+    df = pd.DataFrame(data, columns=['Codigo', 'Nome', 'Centro C.', 'Secretaria', 'Cargo', 'CPF', 'AG', 'CC', 'Vinculo', 'Admissão', 'Nascimento'] +
                       [field + suffix for field in codigos_proventos.values() for suffix in ['_QTD', '_VALOR']] +
                       [field + suffix for field in codigos_desconto.values() for suffix in ['_QTD', '_VALOR']])
     if mapeamento_codigos:
