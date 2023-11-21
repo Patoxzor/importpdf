@@ -9,7 +9,7 @@ from style_interface import configure_treeview_style, button_style, label_style
 from update import check_for_updates, download_and_install_update
 import os
 import tkinter.colorchooser as colorchooser
-from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro, buscar_empresa_por_descricao, verificar_cargo_e_salario
+from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro, buscar_empresa_por_descricao, verificar_cargo_e_salario, adicionar_funcao, verificar_codigo_funcao, inserir_funcionario_no_banco
 from eventos import extrair_e_categorizar_dados
 
 
@@ -182,6 +182,9 @@ class App:
 
         button_update_vinculo = tk.Button(new_window, text="Atualizar Vínculo", command=lambda: self.atualizar_vinculo(tree))
         button_update_vinculo.pack(side=tk.LEFT, padx=10)
+        
+        button_cadastrar_todos = tk.Button(new_window, text="Cadastrar Todos", command=lambda: self.cadastrar_todos_funcionarios(tree))
+        button_cadastrar_todos.pack(pady=10)
 
         new_window.minsize(600, 400)
 
@@ -301,7 +304,7 @@ class App:
             if palavra in descricao_lower:
                 return palavra
 
-        return "prefeitura"
+        return "pref"
 
     def add_column(self, tree):
         column_name = simpledialog.askstring("Nova Coluna", "Digite o nome da nova coluna:")
@@ -326,13 +329,11 @@ class App:
         column = tree.identify_column(event.x)
         col_index = int(column[1:]) - 1 
 
-        # Obtendo o valor atual da célula, lidando com índices fora do alcance para novas colunas
         try:
             current_value = tree.item(item, 'values')[col_index]
         except IndexError:
             current_value = ""
 
-        # Diálogo para novo valor
         new_value = simpledialog.askstring("Editar Célula", "Editar:", initialvalue=current_value)
         if new_value is not None:
             values = list(tree.item(item, 'values'))
@@ -343,11 +344,12 @@ class App:
 
             values[col_index] = new_value
             tree.item(item, values=values)
+
  
     def verificar_centros_custos_e_secretarias_treeview(self, tree, nome_tabela_centro_custos, nome_tabela_secretaria):
         centros_custos_unicos = set()
         secretarias_unicas = set()
-        combinacoes_nao_existentes = set()  # Inicialize apenas como um conjunto
+        combinacoes_nao_existentes = set()
         centros_custos_nao_existentes = []
         secretarias_nao_existentes = []
 
@@ -358,20 +360,20 @@ class App:
             cargo = valores[4] 
             salario_valor = valores[-1]
 
-            salario_valor_formatado = salario_valor.replace('.', '').replace(',', '.')
+            salario_valor_formatado = salario_valor.replace('R$', '').replace('.', '').replace(',', '.')
 
             try:
                 salario_valor_decimal = Decimal(salario_valor_formatado).quantize(Decimal('0.00'))
             except InvalidOperation as e:
-                messagebox.showerror("Erro", f"Valor de salário inválido: {salario_valor}")
+                messagebox.showerror("Erro", f"Valor de salário inválido para o cargo '{cargo}': {salario_valor}")
                 continue
 
             centros_custos_unicos.add(descricao_centro_custos)
             secretarias_unicas.add(descricao_secretaria)
 
-            resultado = verificar_cargo_e_salario(self.database, cargo, salario_valor_decimal)
+            resultado = verificar_cargo_e_salario(self.database, cargo[:50], salario_valor_decimal)
             print("Resultado da verificação de cargo e salário:", resultado)
-            if resultado:  # Adiciona a combinação se não for encontrada no banco de dados
+            if resultado:  
                 combinacao = f"{cargo} - {salario_valor}"
                 combinacoes_nao_existentes.add(combinacao)
                 print("Combinacao adicionada:", combinacao)
@@ -384,13 +386,9 @@ class App:
             if not verificar_existencia(self.database, nome_tabela_secretaria, secretaria):
                 secretarias_nao_existentes.append(secretaria)
 
-        print("Combinacoes não existentes antes de mostrar:", combinacoes_nao_existentes)
         self.mostrar_dados_nao_existentes(centros_custos_nao_existentes, secretarias_nao_existentes, combinacoes_nao_existentes)
 
-
-
     def mostrar_dados_nao_existentes(self, centros_custos_nao_existentes, secretarias_nao_existentes, combinacoes_nao_existentes):
-        print("Combinacoes não existentes recebidas:", combinacoes_nao_existentes)
         new_window = tk.Toplevel(self.root)
         new_window.title("Dados não existentes")
 
@@ -402,7 +400,6 @@ class App:
         frame_secretarias.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         frame_combinacoes.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # Adicione labels e listboxes para centros de custos
         label_cc = tk.Label(frame_centro_custos, text="Centros de Custos não existentes")
         label_cc.pack()
         listbox_cc = tk.Listbox(frame_centro_custos)
@@ -410,7 +407,6 @@ class App:
             listbox_cc.insert(tk.END, centro)
         listbox_cc.pack(fill=tk.BOTH, expand=True)
 
-        # Adicione labels e listboxes para secretarias
         label_sec = tk.Label(frame_secretarias, text="Secretarias não existentes")
         label_sec.pack()
         listbox_sec = tk.Listbox(frame_secretarias)
@@ -425,20 +421,27 @@ class App:
             listbox_combinacoes.insert(tk.END, combinacao)
         listbox_combinacoes.pack(fill=tk.BOTH, expand=True)
 
-        # Adicione botões para adicionar centros de custos e secretarias
         btn_adicionar_cc = tk.Button(frame_centro_custos, text="Adicionar Centros de Custos", command=lambda: self.adicionar_centros_custos(centros_custos_nao_existentes))
         btn_adicionar_cc.pack(pady=10)
-
-        btn_adicionar_sec = tk.Button(frame_secretarias, text="Adicionar Secretarias", command=lambda: self.adicionar_secretarias(secretarias_nao_existentes))
+        btn_adicionar_sec = tk.Button(frame_secretarias, text="Adicionar Localização", command=lambda: self.adicionar_secretarias(secretarias_nao_existentes))
         btn_adicionar_sec.pack(pady=10)
-
-        # Botão para adicionar combinações de cargos e salários
-        btn_adicionar_combinacoes = tk.Button(frame_combinacoes, text="Adicionar Combinações", command=lambda: self.adicionar_combinacoes(combinacoes_nao_existentes))
+        btn_adicionar_combinacoes = tk.Button(frame_combinacoes,  text="Adicionar Funções", command=lambda: self.adicionar_funcoes(combinacoes_nao_existentes))
         btn_adicionar_combinacoes.pack(pady=10)
+        btn_adicionar_todos = tk.Button( new_window,text="Adicionar Todos os Dados",command=lambda: self.adicionar_todos_os_dados(centros_custos_nao_existentes, secretarias_nao_existentes, combinacoes_nao_existentes))
+        btn_adicionar_todos.pack(side=tk.LEFT,pady=10)
 
-        new_window.minsize(800, 400) 
-       
+        new_window.minsize(800, 400)
 
+    def adicionar_funcoes(self, combinacoes):
+        for combinacao in combinacoes:
+            descricao, faixa_salarial = combinacao.rsplit(' - ', 1)
+            faixa_salarial = Decimal(faixa_salarial.replace('R$', '').replace('.', '').replace(',', '.')).quantize(Decimal('0.00'))
+            
+            descricao_truncada = descricao[:50]
+            faixa_salarial_str = str(faixa_salarial)
+
+            adicionar_funcao(self.database, descricao_truncada, faixa_salarial_str)
+    
     def adicionar_centros_custos(self, centros_custos_nao_existentes):
         nome_tabela = 'centrocusto'
 
@@ -457,23 +460,67 @@ class App:
             except Exception as e:
                 messagebox.showerror("Erro", f"Erro ao adicionar secretaria '{descricao}'. Erro: {e}")
     
+    def adicionar_todos_os_dados(self, centros_custos_nao_existentes, secretarias_nao_existentes, combinacoes_nao_existentes):
+        self.adicionar_centros_custos(centros_custos_nao_existentes)
+        self.adicionar_secretarias(secretarias_nao_existentes)
+        self.adicionar_funcoes(combinacoes_nao_existentes)
+        messagebox.showinfo("Concluído", "Todos os dados não existentes foram adicionados.")
+
     def atualizar_descricoes_por_codigos(self, tree):
         for item in tree.get_children():
             valores = tree.item(item, 'values')
             descricao_centro_custos = valores[2]
             descricao_secretaria = valores[3]
+            descricao_cargo = valores[4] 
+            salario_valor = valores[-1] 
+
+            try:
+                # Removendo 'R$' e substituindo ',' por '.'
+                salario_valor_limpo = salario_valor.replace('R$', '').replace('.', '').replace(',', '.')
+                salario_valor_formatado = Decimal(salario_valor_limpo).quantize(Decimal('0.00'))
+            except InvalidOperation:
+                print(f"Erro de conversão para o valor do salário: {salario_valor}")
+                continue
 
             codigo_centro_custos = verificar_existencia(self.database, 'centrocusto', descricao_centro_custos)
             codigo_secretaria = verificar_existencia(self.database, 'localizacao', descricao_secretaria)
+            codigo_funcao = verificar_codigo_funcao(self.database, descricao_cargo, salario_valor_formatado)
 
-            # Atualiza os valores na Treeview
             novos_valores = list(valores)
             if codigo_centro_custos:
                 novos_valores[2] = codigo_centro_custos
             if codigo_secretaria:
                 novos_valores[3] = codigo_secretaria
+            if codigo_funcao:
+                novos_valores[4] = codigo_funcao  # Atualizando a descrição do cargo pelo código da função
 
             tree.item(item, values=novos_valores)
+
+    def cadastrar_todos_funcionarios(self, tree):
+        for item in tree.get_children():
+            dados_brutos = tree.item(item, 'values')
+            dados_funcionario = []
+
+            for i, valor in enumerate(dados_brutos):
+                if i == 12:  # Supondo que o índice 12 seja o salário
+                    try:
+                        # Remove pontos e substitui vírgula por ponto
+                        valor_convertido = float(valor.replace('.', '').replace(',', '.'))
+                    except ValueError:
+                        messagebox.showerror("Erro", f"Valor de salário inválido na coluna {i}: {valor}")
+                        return
+                else:
+                    # Processamento para outras colunas (inteiros e strings)
+                    valor_convertido = valor
+
+                dados_funcionario.append(valor_convertido)
+
+            inserir_funcionario_no_banco(self.database, dados_funcionario)
+
+        messagebox.showinfo("Sucesso", "Todos os funcionários foram cadastrados com sucesso.")
+
+
+
   
     def choose_color(self, target):
         color_code = colorchooser.askcolor(title="Escolha a cor", initialcolor=self.color_preferences.get(target))
