@@ -106,7 +106,6 @@ def verificar_cargo_e_salario(database, cargo, salario_valor):
         else:
             print("Nenhum resultado encontrado.")
 
-        # Se o resultado for None, o cargo com essa faixa salarial não existe
         return resultado is None
     except ValueError as ve:
         messagebox.showerror(f"Valor de salário inválido para a descrição '{cargo}' e valor '{salario_valor}': {ve}")
@@ -158,21 +157,34 @@ def verificar_codigo_funcao(database, cargo, salario_valor):
         messagebox.showerror("Erro", f"Erro ao verificar cargo e salário: {e}")
         return None
     
-def inserir_funcionario_no_banco(database, dados_funcionario):
-    codigo = obter_proximo_codigo(database, "funcionarios")
-    with database.cursor() as cursor:
-        cursor.execute("SET IDENTITY_INSERT funcionarios ON")
-        query = "INSERT INTO funcionarios (codigo, registro, nome, centrocusto, localizacao, funcao, cpf, agencia, contacorrente, tipovinculo, dataadm, nascimento, salario, empresa) VALUES (?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        parametros = (codigo, codigo, dados_funcionario[1], dados_funcionario[2], dados_funcionario[3], dados_funcionario[4], dados_funcionario[5], dados_funcionario[6], dados_funcionario[7], dados_funcionario[8], dados_funcionario[9], dados_funcionario[10], dados_funcionario[12], dados_funcionario[13])
-        print("Query SQL:", query)
-        print("Parâmetros:", parametros)
-        try:
-            cursor.execute(query, parametros)
-            cursor.execute("SET IDENTITY_INSERT funcionarios OFF")
-            database.commit()
-            messagebox.showinfo("Sucesso", "Funcionário cadastrado com sucesso!")
-        except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao cadastrar funcionário: {e}")
+def inserir_funcionarios_no_banco(database, lista_dados_funcionarios):
+    escolha = messagebox.askyesno("Escolha do Código", "Deseja usar os códigos existentes na TreeView?")
+    funcionarios_nao_adicionados = []
+
+    for dados_funcionario in lista_dados_funcionarios:
+        if escolha:
+            codigo = dados_funcionario[0]  # Supondo que o código esteja no índice 0
+        else:
+            codigo = obter_proximo_codigo(database, "funcionarios")
+        with database.cursor() as cursor:
+            cursor.execute("SET IDENTITY_INSERT funcionarios ON")
+            query = "INSERT INTO funcionarios (codigo, registro, nome, centrocusto, localizacao, funcao, cpf, agencia, contacorrente, tipovinculo, dataadm, nascimento, salario, empresa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            parametros = (codigo, codigo, dados_funcionario[1], dados_funcionario[2], dados_funcionario[3], dados_funcionario[4], dados_funcionario[5], dados_funcionario[6], dados_funcionario[7], dados_funcionario[8], dados_funcionario[9], dados_funcionario[10], dados_funcionario[12], dados_funcionario[13])
+            try:
+                cursor.execute(query, parametros)
+                cursor.execute("SET IDENTITY_INSERT funcionarios OFF")
+            except Exception as e:
+                funcionarios_nao_adicionados.append(dados_funcionario[1])  # Supondo que o nome esteja no índice 1
+                continue
+
+    database.commit()
+
+    if funcionarios_nao_adicionados:
+        nomes_nao_adicionados = ", ".join(funcionarios_nao_adicionados)
+        messagebox.showinfo("Funcionários Não Adicionados", f"Não foi possível adicionar os seguintes funcionários: {nomes_nao_adicionados}")
+    else:
+        messagebox.showinfo("Sucesso", "Todos os funcionários foram cadastrados com sucesso!")
+
 
 
 
