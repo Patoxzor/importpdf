@@ -7,7 +7,7 @@ def criar_conexao_sql_server(database_sqlserver = None):
         server = f'{socket.gethostname()}\\SQL2008'
         username = 'SA'
         password = ''
-        driver = '{SQL Server Native Client 10.0}' # Driver for SQL Server 2008
+        driver = '{SQL Server Native Client 10.0}'
         
         if database_sqlserver:
             conn_str = f'DRIVER={driver};SERVER={server};DATABASE={database_sqlserver};UID={username};PWD={password}'
@@ -41,7 +41,6 @@ def verificar_funcionario(database, codigo, cpf):
         messagebox.showerror("Erro", f"Erro ao verificar o funcionário no banco de dados: {e}")
         return None
 
-# Função para verificar todos os funcionários extraídos do PDF
 def verificar_todos_funcionarios(database, lista_funcionarios):
     funcionarios_nao_encontrados = []
     for funcionario in lista_funcionarios:
@@ -60,7 +59,7 @@ def verificar_existencia(database, nome_tabela, descricao):
 
 def obter_proximo_codigo(database, nome_tabela):
     cursor = database.cursor()
-    query = f"SELECT MAX(codigo) FROM {nome_tabela}"
+    query = f"SELECT MAX(CAST(CODIGO AS INT)) FROM {nome_tabela}"
     cursor.execute(query)
     resultado = cursor.fetchone()
     return (int(resultado[0]) + 1) if resultado and resultado[0] is not None else 1
@@ -88,7 +87,6 @@ def obter_codigo_e_descricao(self, nome_tabela, descricao):
 def buscar_empresa_por_descricao(database, nome_tabela, descricao):
     cursor = database.cursor()
     descricao_like = f"%{descricao}%"
-    # Alterando 'descricao' para 'razaosocial' na consulta
     query = f"SELECT codigo, razaosocial FROM {nome_tabela} WHERE razaosocial LIKE ?"
     cursor.execute(query, (descricao_like,))
     resultado = cursor.fetchone()
@@ -96,20 +94,13 @@ def buscar_empresa_por_descricao(database, nome_tabela, descricao):
 
 def verificar_cargo_e_salario(database, cargo, salario_valor):
     try:
-        # Imprimir os valores recebidos
-       # print("Verificando cargo e salário:", cargo, salario_valor)
 
         cursor = database.cursor()
-        descricao_like = f'{cargo}'
+        descricao_truncada = cargo[:50]
         query = "SELECT codigo, descricao, faixasalarial FROM funcoes WHERE descricao = ? AND faixasalarial = ?"
         
-        # Imprimir a consulta SQL
-        #print("Executando consulta SQL:", query, "com", cargo, salario_valor)
-
-        cursor.execute(query, (descricao_like, salario_valor))
+        cursor.execute(query, (descricao_truncada, salario_valor))
         resultado = cursor.fetchone()
-
-        # Imprimir o resultado da consulta
         if resultado:
             print("Resultado encontrado:", resultado)
         else:
@@ -118,11 +109,74 @@ def verificar_cargo_e_salario(database, cargo, salario_valor):
         # Se o resultado for None, o cargo com essa faixa salarial não existe
         return resultado is None
     except ValueError as ve:
-        messagebox.showerror("Erro", f"Valor de salário inválido: {ve}")
+        messagebox.showerror(f"Valor de salário inválido para a descrição '{cargo}' e valor '{salario_valor}': {ve}")
         return False
     except Exception as e:
         messagebox.showerror("Erro", f"Erro ao verificar cargo e salário: {e}")
         return False
+
+def adicionar_funcao(database, descricao, faixa_salarial):
+    try:
+
+        codigo = obter_proximo_codigo(database, 'funcoes')
+
+        # Preparar a query SQL com SET IDENTITY_INSERT
+        cursor = database.cursor()
+        cursor.execute("SET IDENTITY_INSERT funcoes ON")
+
+        insert_query = "INSERT INTO funcoes (codigo, descricao, faixasalarial) VALUES (?, ?, ?)"
+        cursor.execute(insert_query, (codigo, descricao, faixa_salarial))
+
+        cursor.execute("SET IDENTITY_INSERT funcoes OFF")
+        database.commit()
+
+        return True
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao adicionar a função no banco de dados: {e}")
+        return False
+
+def verificar_codigo_funcao(database, cargo, salario_valor):
+    try:
+        cursor = database.cursor()
+        descricao_truncada = cargo[:50]
+        query = "SELECT codigo FROM funcoes WHERE descricao = ? AND faixasalarial = ?"
+        
+        cursor.execute(query, (descricao_truncada, salario_valor))
+        resultado = cursor.fetchone()
+        
+        if resultado:
+            print("Resultado encontrado:", resultado)
+            return resultado[0]
+        else:
+            print("Nenhum resultado encontrado.")
+            return None  
+
+    except ValueError as ve:
+        messagebox.showerror(f"Valor de salário inválido para a descrição '{cargo}' e valor '{salario_valor}': {ve}")
+        return None
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao verificar cargo e salário: {e}")
+        return None
+    
+def inserir_funcionario_no_banco(database, dados_funcionario):
+    codigo = obter_proximo_codigo(database, "funcionarios")
+    with database.cursor() as cursor:
+        cursor.execute("SET IDENTITY_INSERT funcionarios ON")
+        query = "INSERT INTO funcionarios (codigo, registro, nome, centrocusto, localizacao, funcao, cpf, agencia, contacorrente, tipovinculo, dataadm, nascimento, salario, empresa) VALUES (?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        parametros = (codigo, codigo, dados_funcionario[1], dados_funcionario[2], dados_funcionario[3], dados_funcionario[4], dados_funcionario[5], dados_funcionario[6], dados_funcionario[7], dados_funcionario[8], dados_funcionario[9], dados_funcionario[10], dados_funcionario[12], dados_funcionario[13])
+        print("Query SQL:", query)
+        print("Parâmetros:", parametros)
+        try:
+            cursor.execute(query, parametros)
+            cursor.execute("SET IDENTITY_INSERT funcionarios OFF")
+            database.commit()
+            messagebox.showinfo("Sucesso", "Funcionário cadastrado com sucesso!")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao cadastrar funcionário: {e}")
+
+
+
+
 
 
 
