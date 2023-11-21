@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
 import pandas as pd
 from decimal import Decimal, InvalidOperation
+import datetime
 from data_func import extrair_dados_pdf
 from excel_format import formatar_cabecalho, formatar_cpf, ajustar_largura_colunas, adicionar_bordas, remover_gridlines
 from config_json import ConfigManager
@@ -9,9 +10,8 @@ from style_interface import configure_treeview_style, button_style, label_style
 from update import check_for_updates, download_and_install_update
 import os
 import tkinter.colorchooser as colorchooser
-from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro, buscar_empresa_por_descricao, verificar_cargo_e_salario, adicionar_funcao, verificar_codigo_funcao, inserir_funcionario_no_banco
+from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro, buscar_empresa_por_descricao, verificar_cargo_e_salario, adicionar_funcao, verificar_codigo_funcao, inserir_funcionarios_no_banco
 from eventos import extrair_e_categorizar_dados
-
 
 class App:
     def __init__(self, root):
@@ -33,6 +33,8 @@ class App:
         self.label_proventos = None
         self.label_descontos = None
         self.database = None
+        self.filename = None
+        self.popup_windows = {}
         check_for_updates()
     
     def setup_ui(self):
@@ -131,8 +133,13 @@ class App:
             messagebox.showinfo("Verificação", "Todos os funcionários foram encontrados no banco de dados.")
 
     def mostrar_funcionarios_nao_encontrados(self, funcionarios_nao_encontrados):
+        if 'mostrar_funcionarios_nao_encontrados' in self.popup_windows and self.popup_windows['mostrar_funcionarios_nao_encontrados'].winfo_exists():
+            self.popup_windows['mostrar_funcionarios_nao_encontrados'].lift()
+            return
         new_window = tk.Toplevel(self.root)
         new_window.title("Funcionários não encontrados")
+        self.popup_windows['mostrar_funcionarios_nao_encontrados'] = new_window
+        new_window.grab_set()
 
         container = tk.Frame(new_window)
         container.pack(fill='both', expand=True)
@@ -169,19 +176,13 @@ class App:
         button_check_centro_custos = tk.Button(new_window, text="Verificar Dados", command=lambda: self.verificar_centros_custos_e_secretarias_treeview(tree, 'centrocusto', 'localizacao'))
         button_check_centro_custos.pack(side=tk.LEFT, padx=10)
 
-        button_update = tk.Button(new_window, text="Atualizar Descrições", command=lambda: self.atualizar_descricoes_por_codigos(tree))
+        button_update = tk.Button(new_window, text="Atualizar Descrições", command=lambda: self.atualizar_dados_e_vinculo(tree))
         button_update.pack(side=tk.LEFT, padx=10)
 
         tree.bind("<Double-1>", lambda event: self.on_item_double_click(event, tree))
 
-        button_add_column = tk.Button(new_window, text="Adicionar Coluna", command=lambda: self.add_column(tree))
-        button_add_column.pack(side=tk.LEFT, padx=10)
-
         button_add_empresa = tk.Button(new_window, text="Adicionar Códigos de Empresa", command=lambda: self.adicionar_coluna_codigo_empresa(tree, self.database, 'empresas'))
         button_add_empresa.pack(side=tk.LEFT, padx=10)
-
-        button_update_vinculo = tk.Button(new_window, text="Atualizar Vínculo", command=lambda: self.atualizar_vinculo(tree))
-        button_update_vinculo.pack(side=tk.LEFT, padx=10)
         
         button_cadastrar_todos = tk.Button(new_window, text="Cadastrar Todos", command=lambda: self.cadastrar_todos_funcionarios(tree))
         button_cadastrar_todos.pack(pady=10)
@@ -305,24 +306,10 @@ class App:
                 return palavra
 
         return "pref"
-
-    def add_column(self, tree):
-        column_name = simpledialog.askstring("Nova Coluna", "Digite o nome da nova coluna:")
-        if column_name:
-            current_columns = list(tree["columns"])
-
-            if column_name in current_columns:
-                messagebox.showwarning("Aviso", "Esta coluna já existe.")
-                return
-
-            updated_columns = current_columns + [column_name]
-
-            tree.configure(columns=updated_columns)
-
-            for col in updated_columns:
-                tree.heading(col, text=col)
-
-            tree.column(column_name, width=100)
+    
+    def atualizar_dados_e_vinculo(self, tree):
+        self.atualizar_descricoes_por_codigos(tree)
+        self.atualizar_vinculo(tree)
 
     def on_item_double_click(self, event, tree):
         item = tree.identify('item', event.x, event.y)
@@ -391,6 +378,7 @@ class App:
     def mostrar_dados_nao_existentes(self, centros_custos_nao_existentes, secretarias_nao_existentes, combinacoes_nao_existentes):
         new_window = tk.Toplevel(self.root)
         new_window.title("Dados não existentes")
+        new_window.grab_set()
 
         frame_centro_custos = tk.Frame(new_window)
         frame_secretarias = tk.Frame(new_window)
@@ -402,37 +390,57 @@ class App:
 
         label_cc = tk.Label(frame_centro_custos, text="Centros de Custos não existentes")
         label_cc.pack()
-        listbox_cc = tk.Listbox(frame_centro_custos)
+        self.listbox_cc = tk.Listbox(frame_centro_custos)
         for centro in centros_custos_nao_existentes:
-            listbox_cc.insert(tk.END, centro)
-        listbox_cc.pack(fill=tk.BOTH, expand=True)
+            self.listbox_cc.insert(tk.END, centro)
+        self.listbox_cc.pack(fill=tk.BOTH, expand=True)
 
         label_sec = tk.Label(frame_secretarias, text="Secretarias não existentes")
         label_sec.pack()
-        listbox_sec = tk.Listbox(frame_secretarias)
+        self.listbox_sec = tk.Listbox(frame_secretarias)
         for secretaria in secretarias_nao_existentes:
-            listbox_sec.insert(tk.END, secretaria)
-        listbox_sec.pack(fill=tk.BOTH, expand=True)
+            self.listbox_sec.insert(tk.END, secretaria)
+        self.listbox_sec.pack(fill=tk.BOTH, expand=True)
 
         label_combinacoes = tk.Label(frame_combinacoes, text="Combinações de Cargos e Salários não existentes")
         label_combinacoes.pack()
-        listbox_combinacoes = tk.Listbox(frame_combinacoes)
+        self.listbox_combinacoes = tk.Listbox(frame_combinacoes)
         for combinacao in combinacoes_nao_existentes:
-            listbox_combinacoes.insert(tk.END, combinacao)
-        listbox_combinacoes.pack(fill=tk.BOTH, expand=True)
+            self.listbox_combinacoes.insert(tk.END, combinacao)
+        self.listbox_combinacoes.pack(fill=tk.BOTH, expand=True)
 
-        btn_adicionar_cc = tk.Button(frame_centro_custos, text="Adicionar Centros de Custos", command=lambda: self.adicionar_centros_custos(centros_custos_nao_existentes))
-        btn_adicionar_cc.pack(pady=10)
-        btn_adicionar_sec = tk.Button(frame_secretarias, text="Adicionar Localização", command=lambda: self.adicionar_secretarias(secretarias_nao_existentes))
-        btn_adicionar_sec.pack(pady=10)
-        btn_adicionar_combinacoes = tk.Button(frame_combinacoes,  text="Adicionar Funções", command=lambda: self.adicionar_funcoes(combinacoes_nao_existentes))
-        btn_adicionar_combinacoes.pack(pady=10)
         btn_adicionar_todos = tk.Button( new_window,text="Adicionar Todos os Dados",command=lambda: self.adicionar_todos_os_dados(centros_custos_nao_existentes, secretarias_nao_existentes, combinacoes_nao_existentes))
         btn_adicionar_todos.pack(side=tk.LEFT,pady=10)
 
-        new_window.minsize(800, 400)
+    def adicionar_centros_custos(self, centros_custos_nao_existentes):
+        nome_tabela = 'centrocusto'
+        adicionados_com_sucesso = []
+
+        for descricao in centros_custos_nao_existentes:
+            try:
+                criar_registro(self.database, nome_tabela, descricao)
+                adicionados_com_sucesso.append(descricao)
+            except Exception as e:
+                print(f"Erro ao adicionar descrição '{descricao}'. Erro: {e}")
+
+        return adicionados_com_sucesso
+
+    def adicionar_secretarias(self, secretarias_nao_existentes):
+        nome_tabela = 'localizacao'
+        adicionadas_com_sucesso = []
+
+        for descricao in secretarias_nao_existentes:
+            try:
+                criar_registro(self.database, nome_tabela, descricao)
+                adicionadas_com_sucesso.append(descricao)
+            except Exception as e:
+                print(f"Erro ao adicionar secretaria '{descricao}'. Erro: {e}")
+
+        return adicionadas_com_sucesso
 
     def adicionar_funcoes(self, combinacoes):
+        adicionadas_com_sucesso = []
+
         for combinacao in combinacoes:
             descricao, faixa_salarial = combinacao.rsplit(' - ', 1)
             faixa_salarial = Decimal(faixa_salarial.replace('R$', '').replace('.', '').replace(',', '.')).quantize(Decimal('0.00'))
@@ -440,31 +448,33 @@ class App:
             descricao_truncada = descricao[:50]
             faixa_salarial_str = str(faixa_salarial)
 
-            adicionar_funcao(self.database, descricao_truncada, faixa_salarial_str)
-    
-    def adicionar_centros_custos(self, centros_custos_nao_existentes):
-        nome_tabela = 'centrocusto'
-
-        for descricao in centros_custos_nao_existentes:
             try:
-                criar_registro(self.database, nome_tabela, descricao)
+                adicionar_funcao(self.database, descricao_truncada, faixa_salarial_str)
+                adicionadas_com_sucesso.append(combinacao)
             except Exception as e:
-                print(f"Erro ao adicionar descrição '{descricao}'. Erro: {e}")
+                print(f"Erro ao adicionar função '{combinacao}'. Erro: {e}")
 
-    def adicionar_secretarias(self, secretarias_nao_existentes):
-        nome_tabela = 'localizacao'
-
-        for descricao in secretarias_nao_existentes:
-            try:
-                criar_registro(self.database, nome_tabela, descricao)
-            except Exception as e:
-                messagebox.showerror("Erro", f"Erro ao adicionar secretaria '{descricao}'. Erro: {e}")
+        return adicionadas_com_sucesso
     
     def adicionar_todos_os_dados(self, centros_custos_nao_existentes, secretarias_nao_existentes, combinacoes_nao_existentes):
-        self.adicionar_centros_custos(centros_custos_nao_existentes)
-        self.adicionar_secretarias(secretarias_nao_existentes)
-        self.adicionar_funcoes(combinacoes_nao_existentes)
+        centros_custos_adicionados = self.adicionar_centros_custos(centros_custos_nao_existentes)
+        secretarias_adicionadas = self.adicionar_secretarias(secretarias_nao_existentes)
+        funcoes_adicionadas = self.adicionar_funcoes(combinacoes_nao_existentes)
+
+        # Atualiza a Listbox para cada tipo
+        self.atualizar_listbox_apos_adicao(self.listbox_cc, centros_custos_adicionados)
+        self.atualizar_listbox_apos_adicao(self.listbox_sec, secretarias_adicionadas)
+        self.atualizar_listbox_apos_adicao(self.listbox_combinacoes, funcoes_adicionadas)
+
         messagebox.showinfo("Concluído", "Todos os dados não existentes foram adicionados.")
+    
+    def atualizar_listbox_apos_adicao(self, listbox, itens_adicionados):
+        itens_listbox = list(listbox.get(0, tk.END))
+        for item in itens_listbox:
+            if item in itens_adicionados:
+                index = listbox.get(0, tk.END).index(item)
+                listbox.delete(index)
+
 
     def atualizar_descricoes_por_codigos(self, tree):
         for item in tree.get_children():
@@ -497,29 +507,31 @@ class App:
             tree.item(item, values=novos_valores)
 
     def cadastrar_todos_funcionarios(self, tree):
+        lista_dados_funcionarios = []
+
         for item in tree.get_children():
             dados_brutos = tree.item(item, 'values')
             dados_funcionario = []
 
             for i, valor in enumerate(dados_brutos):
-                if i == 12:  # Supondo que o índice 12 seja o salário
+                if i == 12:  # Coluna do Salario
                     try:
-                        # Remove pontos e substitui vírgula por ponto
                         valor_convertido = float(valor.replace('.', '').replace(',', '.'))
                     except ValueError:
                         messagebox.showerror("Erro", f"Valor de salário inválido na coluna {i}: {valor}")
                         return
+                elif i in [9, 10]:  # Coluna dataadm e nascimento
+                    try:
+                        valor_convertido = datetime.datetime.strptime(valor, '%d/%m/%Y')
+                    except ValueError:
+                        messagebox.showerror("Erro", f"Data inválida na coluna {i}: {valor}")
+                        return
                 else:
-                    # Processamento para outras colunas (inteiros e strings)
                     valor_convertido = valor
 
                 dados_funcionario.append(valor_convertido)
-
-            inserir_funcionario_no_banco(self.database, dados_funcionario)
-
-        messagebox.showinfo("Sucesso", "Todos os funcionários foram cadastrados com sucesso.")
-
-
+            lista_dados_funcionarios.append(dados_funcionario)
+        inserir_funcionarios_no_banco(self.database, lista_dados_funcionarios)
 
   
     def choose_color(self, target):
@@ -623,17 +635,21 @@ class App:
 
 
     def view_codes(self):
+        if 'view_codes' in self.popup_windows and self.popup_windows['view_codes'].winfo_exists():
+            self.popup_windows['view_codes'].lift()
+            return
         
         popup = tk.Toplevel(self.root)
         popup.title("Visualizar Códigos Adicionados")
+        self.popup_windows['view_codes'] = popup 
         popup.geometry("500x500")
+        popup.grab_set()
 
         frame_proventos = tk.Frame(popup)
         frame_proventos.pack(pady=10, padx=10, fill=tk.X)
 
         self.label_proventos = tk.Label(frame_proventos, text="Proventos", font=("Arial", 12))
         self.label_proventos.pack()
-
 
         self.listbox_proventos = tk.Listbox(frame_proventos)
         self.update_listbox(self.listbox_proventos, 'provento')
@@ -650,7 +666,6 @@ class App:
 
         btn_import_events = tk.Button(frame_proventos, text="Importar do PDF", command=self.import_events_from_pdf)
         btn_import_events.pack(side=tk.LEFT, padx=5)
-
 
         frame_descontos = tk.Frame(popup)
         frame_descontos.pack(pady=10, padx=10, fill=tk.X)
@@ -768,13 +783,18 @@ class App:
     def save_codigos(self):
         self.codigos_data["proventos"] = self.codigos_proventos
         self.codigos_data["descontos"] = self.codigos_desconto
-        self.codigos_data["mapeamento"] = self.mapeamento_codigos
+        self.codigos_data["matriculas"] = self.mapeamento_codigos
         self.save_to_file()
 
     def view_mapping(self):
+        if 'view_mapping' in self.popup_windows and self.popup_windows['view_mapping'].winfo_exists():
+            self.popup_windows['view_mapping'].lift()
+            return
         popup = tk.Toplevel(self.root)
+        self.popup_windows['view_mapping'] = popup
         popup.title("Visualizar Mapeamento de Códigos")
         popup.geometry("500x500")
+        popup.grab_set
 
         frame_mapping = tk.Frame(popup)
         frame_mapping.pack(pady=10, padx=10, fill=tk.X)
@@ -805,7 +825,6 @@ class App:
     def add_mapping(self):
         new_code = simpledialog.askstring("Adicionar código/matricula", "Digite o código para ser substituido:")
         if new_code:
-            # Aqui você pediria também para a descrição ou o mapeamento correspondente ao novo código
             new_mapping = simpledialog.askstring("Adicionar código/matricula", "Digite o código novo:")
             if new_mapping:
                 self.mapeamento_codigos[new_code] = new_mapping
