@@ -1,6 +1,7 @@
 from tkinter import messagebox
 import pyodbc
 import socket
+from log_erros import logger
 
 def criar_conexao_sql_server(database_sqlserver = None):
     try:
@@ -73,14 +74,14 @@ def criar_registro(database, nome_tabela, descricao):
     cursor.execute(query, (novo_codigo_str, descricao))
     database.commit()
 
-def obter_codigo_e_descricao(self, nome_tabela, descricao):
+def obter_codigo_e_descricao(nome_tabela, descricao, database):
     try:
-        cursor = self.database.cursor()
+        cursor = database.cursor()
         query = f"SELECT codigo, descricao FROM {nome_tabela} WHERE descricao = ?"
         cursor.execute(query, (descricao,))
         resultado = cursor.fetchone()
         return resultado if resultado else (None, None)
-    except Exception as e:
+    except Exception as e:       
         messagebox.showerror("Erro", f"Erro ao obter código e descrição: {e}")
         return None, None
 
@@ -94,7 +95,6 @@ def buscar_empresa_por_descricao(database, nome_tabela, descricao):
 
 def verificar_cargo_e_salario(database, cargo, salario_valor):
     try:
-
         cursor = database.cursor()
         descricao_truncada = cargo[:50]
         query = "SELECT codigo, descricao, faixasalarial FROM funcoes WHERE descricao = ? AND faixasalarial = ?"
@@ -157,15 +157,17 @@ def verificar_codigo_funcao(database, cargo, salario_valor):
         messagebox.showerror("Erro", f"Erro ao verificar cargo e salário: {e}")
         return None
     
-def inserir_funcionarios_no_banco(database, lista_dados_funcionarios):
-    escolha = messagebox.askyesno("Escolha do Código", "Deseja usar os códigos existentes na TreeView?")
+def inserir_funcionarios_no_banco(database, lista_dados_funcionarios, main_window=None):
+    escolha = messagebox.askyesno("Escolha do Código", "Deseja usar os códigos existentes na TreeView?", parent=main_window)
     funcionarios_nao_adicionados = []
+    sucesso = True
 
     for dados_funcionario in lista_dados_funcionarios:
         if escolha:
             codigo = dados_funcionario[0]  # Supondo que o código esteja no índice 0
         else:
             codigo = obter_proximo_codigo(database, "funcionarios")
+
         with database.cursor() as cursor:
             cursor.execute("SET IDENTITY_INSERT funcionarios ON")
             query = "INSERT INTO funcionarios (codigo, registro, nome, centrocusto, localizacao, funcao, cpf, agencia, contacorrente, tipovinculo, dataadm, nascimento, salario, empresa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -174,7 +176,10 @@ def inserir_funcionarios_no_banco(database, lista_dados_funcionarios):
                 cursor.execute(query, parametros)
                 cursor.execute("SET IDENTITY_INSERT funcionarios OFF")
             except Exception as e:
+                error_message = f"[inserir_funcionarios_no_banco] Erro ao inserir funcionário {dados_funcionario[1]} no banco de dados: {e}"
+                logger.error(error_message)
                 funcionarios_nao_adicionados.append(dados_funcionario[1])  # Supondo que o nome esteja no índice 1
+                sucesso = False
                 continue
 
     database.commit()
@@ -182,13 +187,23 @@ def inserir_funcionarios_no_banco(database, lista_dados_funcionarios):
     if funcionarios_nao_adicionados:
         nomes_nao_adicionados = ", ".join(funcionarios_nao_adicionados)
         messagebox.showinfo("Funcionários Não Adicionados", f"Não foi possível adicionar os seguintes funcionários: {nomes_nao_adicionados}")
-    else:
+    elif sucesso:
         messagebox.showinfo("Sucesso", "Todos os funcionários foram cadastrados com sucesso!")
 
+    return sucesso
 
-
-
-
-
-
+def buscar_codigos_por_cpfs(database, lista_cpfs):
+    codigos = {}
+    cursor = database.cursor()
+    for cpf in lista_cpfs:
+        try:
+            query = "SELECT codigo FROM funcionarios WHERE cpf = ?"
+            cursor.execute(query, cpf)
+            resultados = cursor.fetchall()
+            if resultados:
+                codigos[cpf] = [resultado[0] for resultado in resultados]
+        except pyodbc.Error as e:
+            messagebox.showerror(f"Erro ao buscar código para o CPF {cpf}")
+    return codigos
+   
 
