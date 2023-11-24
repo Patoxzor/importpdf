@@ -53,7 +53,6 @@ class ConfigManager:
         data = ConfigManager.load_from_file(filename)
         return data.get('version', '1.0.0')
 
-# Exemplo de uso
 config = ConfigManager()
 config.save_version("1.0.1")
 print(config.load_version())

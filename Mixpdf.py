@@ -9,8 +9,9 @@ from config_json import ConfigManager
 from style_interface import configure_treeview_style, button_style, label_style
 from update import check_for_updates, download_and_install_update
 import os
+from log_erros import setup_logging, logger
 import tkinter.colorchooser as colorchooser
-from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro, buscar_empresa_por_descricao, verificar_cargo_e_salario, adicionar_funcao, verificar_codigo_funcao, inserir_funcionarios_no_banco
+from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro, buscar_empresa_por_descricao, verificar_cargo_e_salario, adicionar_funcao, verificar_codigo_funcao, inserir_funcionarios_no_banco, buscar_codigos_por_cpfs
 from eventos import extrair_e_categorizar_dados
 
 class App:
@@ -30,10 +31,14 @@ class App:
         self.frame_buttons.configure(background=self.color_preferences.get('background')),
         self.color_button_frame.configure(background=self.color_preferences.get('background'))
         self.label_filename.configure(bg=self.color_preferences.get('background'))
+        self.combobox_cpfs = ttk.Combobox(self.root, values=[], state='readonly')
+        self.alteracoes_pendentes = []
         self.label_proventos = None
         self.label_descontos = None
         self.database = None
         self.filename = None
+        self.descricoes_atualizadas = False
+        self.cpf_selecionado = None
         self.popup_windows = {}
         check_for_updates()
     
@@ -88,6 +93,9 @@ class App:
         self.button_view_mapping = tk.Button(self.frame_buttons, text="Alteração de Códigos/Matricula", command=self.view_mapping, **style)
         self.button_view_mapping.pack(side=tk.LEFT, padx=10)
 
+        self.button_verificar_codigos = tk.Button(self.frame_buttons, text="Verificar Codigos existentes", command=lambda:self.codigos_divergentes(self.tree), **style)
+        self.button_verificar_codigos.pack(side=tk.LEFT, padx=10)
+
     def create_color_buttons(self):
         current_directory = os.path.dirname(os.path.realpath(__file__))
         
@@ -122,7 +130,6 @@ class App:
         else:
             messagebox.showwarning("Aviso", "Por favor, selecione um banco de dados para verificar.")
 
-
     def verificar_dados(self, database):
         lista_funcionarios = self.df.to_dict('records')
         funcionarios_nao_encontrados = verificar_todos_funcionarios(database, lista_funcionarios)
@@ -133,13 +140,12 @@ class App:
             messagebox.showinfo("Verificação", "Todos os funcionários foram encontrados no banco de dados.")
 
     def mostrar_funcionarios_nao_encontrados(self, funcionarios_nao_encontrados):
-        if 'mostrar_funcionarios_nao_encontrados' in self.popup_windows and self.popup_windows['mostrar_funcionarios_nao_encontrados'].winfo_exists():
-            self.popup_windows['mostrar_funcionarios_nao_encontrados'].lift()
-            return
+        if 'mostrar_funcionarios_nao_encontrados' in self.popup_windows:
+            self.popup_windows['mostrar_funcionarios_nao_encontrados'].destroy()
+            del self.popup_windows['mostrar_funcionarios_nao_encontrados']
         new_window = tk.Toplevel(self.root)
         new_window.title("Funcionários não encontrados")
         self.popup_windows['mostrar_funcionarios_nao_encontrados'] = new_window
-        new_window.grab_set()
 
         container = tk.Frame(new_window)
         container.pack(fill='both', expand=True)
@@ -164,7 +170,6 @@ class App:
         for funcionario in funcionarios_nao_encontrados:
             tree.insert('', 'end', values=list(funcionario.values()))
 
-        # Configura a largura das colunas, se necessário
         for col in tree['columns']:
             tree.column(col, width=100, minwidth=50)
 
@@ -246,28 +251,146 @@ class App:
 
         new_window.bind('<Control-f>', lambda event: open_search_box())
     
+    def codigos_divergentes(self, tree):
+        self.resultados = {}
+        if self.database is None:
+            messagebox.showerror("Erro", "A conexão com o banco de dados não foi estabelecida.")
+            return
+
+        for item in tree.get_children():
+            valores = tree.item(item, 'values')
+            cpf = valores[5] 
+            codigo = valores[0] 
+            self.resultados[cpf] = codigo
+
+        if self.resultados:
+            self.exibir_resultados_codigos_divergentes(self.resultados)
+        else:
+            messagebox.showinfo("Informação", "Não foram encontrados códigos divergentes.")
+
+    def exibir_resultados_codigos_divergentes(self, resultados):
+        codigos_db = buscar_codigos_por_cpfs(self.database, list(self.resultados.keys()))
+        print("Códigos DB:", codigos_db)
+        print("Resultados Treeview:", resultados)
+
+        cpfs_para_exibir = []
+        for cpf, codigo_treeview in self.resultados.items():
+            codigos_db_lista = codigos_db.get(cpf)
+            if codigos_db_lista is None or int(codigo_treeview) not in codigos_db_lista:
+                cpfs_para_exibir.append(cpf)
+                print(f"CPF divergente: {cpf}, Código Treeview: {codigo_treeview}, Código DB: {codigos_db_lista}") 
+
+        janela_resultados = tk.Toplevel(self.root)
+        janela_resultados.title("Resultados dos Códigos Divergentes")
+        janela_resultados.geometry("700x400")
+
+        frame_selecao_cpf = tk.Frame(janela_resultados)
+        frame_selecao_cpf.pack(fill='x', padx=10, pady=5)
+        label_selecao_cpf = tk.Label(frame_selecao_cpf, text="Selecione um CPF: ")
+        combobox_cpfs = ttk.Combobox(frame_selecao_cpf, values=cpfs_para_exibir, state='readonly')
+        label_selecao_cpf.pack(side='left', padx=5)
+        combobox_cpfs.pack(side='left', padx=5)
+        combobox_cpfs['values'] = cpfs_para_exibir
+
+        frame_atual = tk.Frame(janela_resultados)
+        frame_atual.pack(fill='x', padx=10, pady=5)
+        label_cpf_atual = tk.Label(frame_atual, text="CPF: ")
+        label_codigo_atual = tk.Label(frame_atual, text="Código Atual: ")
+        label_cpf_atual.pack(side='left', padx=5)
+        label_codigo_atual.pack(side='left', padx=5)
+
+        frame_codigos_db = tk.Frame(janela_resultados)
+        frame_codigos_db.pack(side='left', fill='both', expand=True, padx=10, pady=5)
+        label_codigos_db = tk.Label(frame_codigos_db, text="Códigos Disponíveis: ")
+        label_codigos_db.pack(side='top', padx=5)
+        self.listbox_codigos_db = tk.Listbox(frame_codigos_db)
+        self.listbox_codigos_db.pack(fill='both', expand=True)
+
+        frame_alteracoes_pendentes = tk.Frame(janela_resultados)
+        frame_alteracoes_pendentes.pack(side='right', fill='both', expand=True, padx=10, pady=5)
+        label_alteracoes_pendentes = tk.Label(frame_alteracoes_pendentes, text="Alterações Pendentes: ")
+        label_alteracoes_pendentes.pack(side='top', padx=5)
+        self.listbox_alteracoes_pendentes = tk.Listbox(frame_alteracoes_pendentes)
+        self.listbox_alteracoes_pendentes.pack(fill='both', expand=True)
+
+        botao_adicionar_lista = tk.Button(frame_codigos_db, text="Adicionar à Lista", command=self.adicionar_a_lista)
+        botao_adicionar_lista.pack(side='bottom', padx=5, pady=5)
+
+        botao_importar_para_mapping = tk.Button(frame_alteracoes_pendentes, text="Importar para Alterações de códigos", command=self.importar_para_view_mapping)
+        botao_importar_para_mapping.pack(side='bottom', padx=5, pady=5)
+
+        def on_cpf_selected(event):
+            cpf_selecionado = combobox_cpfs.get()
+            codigo_atual_treeview = resultados.get(cpf_selecionado, "Não encontrado na Treeview")
+            codigos_db_lista = codigos_db.get(cpf_selecionado, [])
+
+            label_cpf_atual["text"] = f"CPF: {cpf_selecionado}"
+            label_codigo_atual["text"] = f"Código Atual: {codigo_atual_treeview}"
+            self.listbox_codigos_db.delete(0, tk.END)
+            for codigo in codigos_db_lista:
+                self.listbox_codigos_db.insert('end', codigo)
+            self.cpf_selecionado = cpf_selecionado
+            self.codigo_atual_treeview = codigo_atual_treeview
+            
+        combobox_cpfs.bind("<<ComboboxSelected>>", on_cpf_selected)
+    
+    def adicionar_a_lista(self):
+        indice_selecionado = self.listbox_codigos_db.curselection()
+        if not indice_selecionado:
+            messagebox.showwarning("Aviso", "Selecione um código disponível para adicionar à lista.")
+            return
+
+        codigo_selecionado = self.listbox_codigos_db.get(indice_selecionado)
+        
+        # Presumindo que o CPF já foi selecionado e está armazenado em self.cpf_selecionado
+        cpf_selecionado = self.cpf_selecionado
+        codigo_atual = self.codigo_atual_treeview
+
+        self.adicionar_alteracao_pendente(cpf_selecionado, codigo_atual, codigo_selecionado)
+
+    def adicionar_alteracao_pendente(self, cpf, codigo_atual, codigo_novo):
+        self.alteracoes_pendentes.append((cpf, codigo_atual, codigo_novo))
+        self.atualizar_listbox_alteracoes_pendentes()
+
+    def atualizar_listbox_alteracoes_pendentes(self):
+        self.listbox_alteracoes_pendentes.delete(0, tk.END)
+        for cpf, codigo_atual, codigo_novo in self.alteracoes_pendentes:
+            self.listbox_alteracoes_pendentes.insert(tk.END, f"{codigo_atual} -> {codigo_novo}")
+
+    def importar_para_view_mapping(self):
+        dados_para_importar = [f"{codigo_atual} -> {codigo_novo}" for _, codigo_atual, codigo_novo in self.alteracoes_pendentes]
+        for _, codigo_atual, codigo_novo in self.alteracoes_pendentes:
+            self.mapeamento_codigos[str(codigo_atual)] = str(codigo_novo)
+        
+        self.save_codigos()
+        self.view_mapping(dados_para_importar)
+    
     def atualizar_vinculo(self,tree):
+        if self.descricoes_atualizadas:
+            return
         indice_coluna_vinculo = 8
         for item in tree.get_children():
             valores = list(tree.item(item, 'values'))
+            novo_valor = None
             if valores[indice_coluna_vinculo] == '30 - Regime Juídico Vinculado a Regime Próprio':
-                valores[indice_coluna_vinculo] = '1'
+                novo_valor = '1'
             elif valores[indice_coluna_vinculo] == '45 - Comissão':
-                valores[indice_coluna_vinculo] = '2'
+                novo_valor = '2'
             elif valores[indice_coluna_vinculo] == '65 - Contrato Temporário':
-                valores[indice_coluna_vinculo] = '3'
+                novo_valor = '3'
             elif valores[indice_coluna_vinculo] == '35 - Servidor Público Não Efetivo':
-                valores[indice_coluna_vinculo] = '4'
+                novo_valor = '4'
             elif valores[indice_coluna_vinculo] == '55 - Prestação de Serviços':
-                valores[indice_coluna_vinculo] = '5'
+                novo_valor = '5'
             elif valores[indice_coluna_vinculo] == '90 - Estatutário':
-                valores[indice_coluna_vinculo] = '6'
+                novo_valor = '6'
             elif valores[indice_coluna_vinculo] == '50 - Temporário':
-                valores[indice_coluna_vinculo] = '8'
-            else:
-                valores[indice_coluna_vinculo] = None
-            tree.item(item, values=valores)
-    
+                novo_valor = '8'
+            if novo_valor is not None:
+                valores[indice_coluna_vinculo] = novo_valor
+                tree.item(item, values=valores)
+        self.descricoes_atualizadas = True
+        
     def adicionar_coluna_codigo_empresa(self, tree, database, nome_tabela):
         nome_tabela = 'empresas'
         coluna_empresa = "Empresa"
@@ -325,13 +448,11 @@ class App:
         if new_value is not None:
             values = list(tree.item(item, 'values'))
             
-            # Se a célula for de uma nova coluna, expandir a lista de valores
             if len(values) <= col_index:
                 values.extend([None] * (col_index - len(values) + 1))
 
             values[col_index] = new_value
             tree.item(item, values=values)
-
  
     def verificar_centros_custos_e_secretarias_treeview(self, tree, nome_tabela_centro_custos, nome_tabela_secretaria):
         centros_custos_unicos = set()
@@ -346,24 +467,25 @@ class App:
             descricao_secretaria = valores[3]
             cargo = valores[4] 
             salario_valor = valores[-1]
+            nome= valores[1]
 
             salario_valor_formatado = salario_valor.replace('R$', '').replace('.', '').replace(',', '.')
 
             try:
                 salario_valor_decimal = Decimal(salario_valor_formatado).quantize(Decimal('0.00'))
             except InvalidOperation as e:
-                messagebox.showerror("Erro", f"Valor de salário inválido para o cargo '{cargo}': {salario_valor}")
+                error_message = f"[verificar_Dados] Valor de salário inválido para o nome: '{nome} - '{cargo}': {salario_valor}."
+                logger.error(error_message)
+                messagebox.showerror("Erro", error_message)
                 continue
 
             centros_custos_unicos.add(descricao_centro_custos)
             secretarias_unicas.add(descricao_secretaria)
 
             resultado = verificar_cargo_e_salario(self.database, cargo[:50], salario_valor_decimal)
-            print("Resultado da verificação de cargo e salário:", resultado)
             if resultado:  
                 combinacao = f"{cargo} - {salario_valor}"
                 combinacoes_nao_existentes.add(combinacao)
-                print("Combinacao adicionada:", combinacao)
 
         for centro in centros_custos_unicos:
             if not verificar_existencia(self.database, nome_tabela_centro_custos, centro):
@@ -380,14 +502,17 @@ class App:
         new_window.title("Dados não existentes")
         new_window.grab_set()
 
-        frame_centro_custos = tk.Frame(new_window)
-        frame_secretarias = tk.Frame(new_window)
-        frame_combinacoes = tk.Frame(new_window)
+        main_frame = tk.Frame(new_window)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        frame_centro_custos = tk.Frame(main_frame, bd=2, relief=tk.GROOVE)
+        frame_secretarias = tk.Frame(main_frame, bd=2, relief=tk.GROOVE)
+        frame_combinacoes = tk.Frame(main_frame, bd=2, relief=tk.GROOVE)
 
         frame_centro_custos.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        frame_secretarias.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        frame_combinacoes.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
+        frame_secretarias.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(10, 0)) 
+        frame_combinacoes.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(10, 0)) 
+        
         label_cc = tk.Label(frame_centro_custos, text="Centros de Custos não existentes")
         label_cc.pack()
         self.listbox_cc = tk.Listbox(frame_centro_custos)
@@ -409,8 +534,11 @@ class App:
             self.listbox_combinacoes.insert(tk.END, combinacao)
         self.listbox_combinacoes.pack(fill=tk.BOTH, expand=True)
 
-        btn_adicionar_todos = tk.Button( new_window,text="Adicionar Todos os Dados",command=lambda: self.adicionar_todos_os_dados(centros_custos_nao_existentes, secretarias_nao_existentes, combinacoes_nao_existentes))
-        btn_adicionar_todos.pack(side=tk.LEFT,pady=10)
+        frame_botoes = tk.Frame(new_window)
+        frame_botoes.pack(fill=tk.X, pady=(5, 10)) 
+
+        btn_adicionar_todos = tk.Button(frame_botoes, text="Adicionar Todos os Dados", command=lambda: self.adicionar_todos_os_dados(centros_custos_nao_existentes, secretarias_nao_existentes, combinacoes_nao_existentes))
+        btn_adicionar_todos.pack(pady=5, padx=10)
 
     def adicionar_centros_custos(self, centros_custos_nao_existentes):
         nome_tabela = 'centrocusto'
@@ -475,7 +603,6 @@ class App:
                 index = listbox.get(0, tk.END).index(item)
                 listbox.delete(index)
 
-
     def atualizar_descricoes_por_codigos(self, tree):
         for item in tree.get_children():
             valores = tree.item(item, 'values')
@@ -502,7 +629,7 @@ class App:
             if codigo_secretaria:
                 novos_valores[3] = codigo_secretaria
             if codigo_funcao:
-                novos_valores[4] = codigo_funcao  # Atualizando a descrição do cargo pelo código da função
+                novos_valores[4] = codigo_funcao
 
             tree.item(item, values=novos_valores)
 
@@ -511,29 +638,38 @@ class App:
 
         for item in tree.get_children():
             dados_brutos = tree.item(item, 'values')
+            nome = dados_brutos[1]
             dados_funcionario = []
 
             for i, valor in enumerate(dados_brutos):
-                if i == 12:  # Coluna do Salario
-                    try:
+                try:
+                    if i == 12:  # Coluna do Salario
                         valor_convertido = float(valor.replace('.', '').replace(',', '.'))
-                    except ValueError:
-                        messagebox.showerror("Erro", f"Valor de salário inválido na coluna {i}: {valor}")
-                        return
-                elif i in [9, 10]:  # Coluna dataadm e nascimento
-                    try:
+                    elif i in [9, 10]:  # Colunas dataadm e nascimento
                         valor_convertido = datetime.datetime.strptime(valor, '%d/%m/%Y')
-                    except ValueError:
-                        messagebox.showerror("Erro", f"Data inválida na coluna {i}: {valor}")
-                        return
-                else:
-                    valor_convertido = valor
+                    else:
+                        valor_convertido = valor
+                except ValueError as e:
+                    error_message = f"Erro na linha '{nome}', coluna {i}: {valor}. Detalhes: {str(e)}"
+                    logger.error(error_message)
+                    messagebox.showerror("Erro", error_message)
+                    return
 
                 dados_funcionario.append(valor_convertido)
             lista_dados_funcionarios.append(dados_funcionario)
-        inserir_funcionarios_no_banco(self.database, lista_dados_funcionarios)
+        sucesso = inserir_funcionarios_no_banco(self.database, lista_dados_funcionarios, self.root)
+        if sucesso:
+            self.atualizar_treeview()
+        return sucesso 
+    def atualizar_treeview(self):
+        for i in self.tree.get_children():
+            self.tree.delete(i)
 
-  
+        novos_dados = self.verificar_dados()
+
+        for dados in novos_dados:
+            self.tree.insert("", "end", values=dados)
+
     def choose_color(self, target):
         color_code = colorchooser.askcolor(title="Escolha a cor", initialcolor=self.color_preferences.get(target))
         if color_code[1] is not None:
@@ -544,7 +680,6 @@ class App:
                 self.update_background_color(color_code[1])
             elif target == 'buttons':
                 self.update_button_colors(color_code[1])
-
 
     def update_background_color(self, color):
         self.root.configure(background=color)
@@ -591,7 +726,6 @@ class App:
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
     
     def on_frame_configure(self, event):
-        # Assegurar que a área de rolagem do canvas se ajuste ao tamanho do frame
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         
 
@@ -783,10 +917,10 @@ class App:
     def save_codigos(self):
         self.codigos_data["proventos"] = self.codigos_proventos
         self.codigos_data["descontos"] = self.codigos_desconto
-        self.codigos_data["matriculas"] = self.mapeamento_codigos
+        self.codigos_data["mapeamento"] = self.mapeamento_codigos
         self.save_to_file()
 
-    def view_mapping(self):
+    def view_mapping(self, dados_importados=None):
         if 'view_mapping' in self.popup_windows and self.popup_windows['view_mapping'].winfo_exists():
             self.popup_windows['view_mapping'].lift()
             return
@@ -806,6 +940,10 @@ class App:
         self.update_listbox(self.listbox_mapping, 'mapping')
         self.listbox_mapping.pack(fill=tk.X)
 
+        if dados_importados:
+            for item in dados_importados:
+                self.listbox_mapping.insert(tk.END, item)
+
         btn_add_mapping = tk.Button(frame_mapping, text="Adicionar", command=self.add_mapping)
         btn_add_mapping.pack(side=tk.LEFT, padx=5)
 
@@ -818,10 +956,10 @@ class App:
         self.button_clear_all_mappings = tk.Button(frame_mapping, text="Remover Todos", command=self.clear_all_mappings)
         self.button_clear_all_mappings.pack(side=tk.LEFT, padx=5)
 
-        btn_close = tk.Button(popup, text="Fechar", command=popup.destroy)
+        btn_close = tk.Button(popup, text="Fechar", command=lambda: [self.save_codigos(), popup.destroy()])
         btn_close.pack(pady=20)
         popup.wait_window()
-
+        
     def add_mapping(self):
         new_code = simpledialog.askstring("Adicionar código/matricula", "Digite o código para ser substituido:")
         if new_code:
@@ -946,6 +1084,7 @@ class App:
             os.system(f'start excel "{self.excel_filename}"')
 
 if __name__ == "__main__":
+    setup_logging()
     root = tk.Tk()
     app = App(root)
     root.mainloop()
