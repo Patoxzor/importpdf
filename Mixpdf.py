@@ -146,7 +146,7 @@ class App:
         new_window = tk.Toplevel(self.root)
         new_window.title("Funcionários não encontrados")
         self.popup_windows['mostrar_funcionarios_nao_encontrados'] = new_window
-
+        
         container = tk.Frame(new_window)
         container.pack(fill='both', expand=True)
 
@@ -280,11 +280,11 @@ class App:
                 cpfs_para_exibir.append(cpf)
                 print(f"CPF divergente: {cpf}, Código Treeview: {codigo_treeview}, Código DB: {codigos_db_lista}") 
 
-        janela_resultados = tk.Toplevel(self.root)
-        janela_resultados.title("Resultados dos Códigos Divergentes")
-        janela_resultados.geometry("700x400")
+        self.janela_resultados = tk.Toplevel(self.root)
+        self.janela_resultados.title("Resultados dos Códigos Divergentes")
+        self.janela_resultados.geometry("700x400")
 
-        frame_selecao_cpf = tk.Frame(janela_resultados)
+        frame_selecao_cpf = tk.Frame(self.janela_resultados)
         frame_selecao_cpf.pack(fill='x', padx=10, pady=5)
         label_selecao_cpf = tk.Label(frame_selecao_cpf, text="Selecione um CPF: ")
         combobox_cpfs = ttk.Combobox(frame_selecao_cpf, values=cpfs_para_exibir, state='readonly')
@@ -292,21 +292,21 @@ class App:
         combobox_cpfs.pack(side='left', padx=5)
         combobox_cpfs['values'] = cpfs_para_exibir
 
-        frame_atual = tk.Frame(janela_resultados)
+        frame_atual = tk.Frame(self.janela_resultados)
         frame_atual.pack(fill='x', padx=10, pady=5)
         label_cpf_atual = tk.Label(frame_atual, text="CPF: ")
         label_codigo_atual = tk.Label(frame_atual, text="Código Atual: ")
         label_cpf_atual.pack(side='left', padx=5)
         label_codigo_atual.pack(side='left', padx=5)
 
-        frame_codigos_db = tk.Frame(janela_resultados)
+        frame_codigos_db = tk.Frame(self.janela_resultados)
         frame_codigos_db.pack(side='left', fill='both', expand=True, padx=10, pady=5)
         label_codigos_db = tk.Label(frame_codigos_db, text="Códigos Disponíveis: ")
         label_codigos_db.pack(side='top', padx=5)
         self.listbox_codigos_db = tk.Listbox(frame_codigos_db)
         self.listbox_codigos_db.pack(fill='both', expand=True)
 
-        frame_alteracoes_pendentes = tk.Frame(janela_resultados)
+        frame_alteracoes_pendentes = tk.Frame(self.janela_resultados)
         frame_alteracoes_pendentes.pack(side='right', fill='both', expand=True, padx=10, pady=5)
         label_alteracoes_pendentes = tk.Label(frame_alteracoes_pendentes, text="Alterações Pendentes: ")
         label_alteracoes_pendentes.pack(side='top', padx=5)
@@ -349,8 +349,24 @@ class App:
         self.adicionar_alteracao_pendente(cpf_selecionado, codigo_atual, codigo_selecionado)
 
     def adicionar_alteracao_pendente(self, cpf, codigo_atual, codigo_novo):
+        # Verificando se já existe uma alteração pendente para o mesmo CPF
+        for alteracao in self.alteracoes_pendentes:
+            cpf_existente, _, _ = alteracao
+            if cpf_existente == cpf:
+                messagebox.showwarning("Aviso", f"Já existe uma alteração pendente para o CPF: {cpf}.")
+                self.janela_resultados.focus_set()
+                return
+
+        # Verificando se o código novo já existe no view_mapping
+        if codigo_novo in self.mapeamento_codigos:
+            messagebox.showwarning("Aviso", f"O código {codigo_novo} já está mapeado.")
+            self.janela_resultados.focus_set()
+            return
+
+        # Adicionando a alteração pendente se não houver conflito
         self.alteracoes_pendentes.append((cpf, codigo_atual, codigo_novo))
         self.atualizar_listbox_alteracoes_pendentes()
+
 
     def atualizar_listbox_alteracoes_pendentes(self):
         self.listbox_alteracoes_pendentes.delete(0, tk.END)
@@ -589,13 +605,12 @@ class App:
         secretarias_adicionadas = self.adicionar_secretarias(secretarias_nao_existentes)
         funcoes_adicionadas = self.adicionar_funcoes(combinacoes_nao_existentes)
 
-        # Atualiza a Listbox para cada tipo
         self.atualizar_listbox_apos_adicao(self.listbox_cc, centros_custos_adicionados)
         self.atualizar_listbox_apos_adicao(self.listbox_sec, secretarias_adicionadas)
         self.atualizar_listbox_apos_adicao(self.listbox_combinacoes, funcoes_adicionadas)
 
         messagebox.showinfo("Concluído", "Todos os dados não existentes foram adicionados.")
-    
+        
     def atualizar_listbox_apos_adicao(self, listbox, itens_adicionados):
         itens_listbox = list(listbox.get(0, tk.END))
         for item in itens_listbox:
@@ -657,18 +672,7 @@ class App:
 
                 dados_funcionario.append(valor_convertido)
             lista_dados_funcionarios.append(dados_funcionario)
-        sucesso = inserir_funcionarios_no_banco(self.database, lista_dados_funcionarios, self.root)
-        if sucesso:
-            self.atualizar_treeview()
-        return sucesso 
-    def atualizar_treeview(self):
-        for i in self.tree.get_children():
-            self.tree.delete(i)
-
-        novos_dados = self.verificar_dados()
-
-        for dados in novos_dados:
-            self.tree.insert("", "end", values=dados)
+        inserir_funcionarios_no_banco(self.database, lista_dados_funcionarios, self.root)
 
     def choose_color(self, target):
         color_code = colorchooser.askcolor(title="Escolha a cor", initialcolor=self.color_preferences.get(target))

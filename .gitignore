@@ -2,6 +2,7 @@
 *.spec
 *.json
 *achar valores de x e y.txt
+*erros_log.txt
 
 # Ignora o diretório _pycache_
 __pycache__/
