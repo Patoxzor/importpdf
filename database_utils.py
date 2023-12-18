@@ -159,14 +159,18 @@ def verificar_codigo_funcao(database, cargo, salario_valor):
     
 def inserir_funcionarios_no_banco(database, lista_dados_funcionarios, main_window=None):
     escolha = messagebox.askyesno("Escolha do Código", "Deseja usar os códigos existentes na TreeView?", parent=main_window)
+    mapeamento_codigos = {}
     funcionarios_nao_adicionados = []
     sucesso = True
 
     for dados_funcionario in lista_dados_funcionarios:
+        codigo_original = dados_funcionario[0]
         if escolha:
-            codigo = dados_funcionario[0]  # Supondo que o código esteja no índice 0
+            codigo = codigo_original  # Supondo que o código esteja no índice 0
         else:
             codigo = obter_proximo_codigo(database, "funcionarios")
+            if codigo != codigo_original:
+                mapeamento_codigos[codigo_original] = codigo
 
         with database.cursor() as cursor:
             cursor.execute("SET IDENTITY_INSERT funcionarios ON")
@@ -183,6 +187,7 @@ def inserir_funcionarios_no_banco(database, lista_dados_funcionarios, main_windo
                 continue
 
     database.commit()
+    
 
     if funcionarios_nao_adicionados:
         nomes_nao_adicionados = ", ".join(funcionarios_nao_adicionados)
@@ -190,7 +195,8 @@ def inserir_funcionarios_no_banco(database, lista_dados_funcionarios, main_windo
     elif sucesso:
         messagebox.showinfo("Sucesso", "Todos os funcionários foram cadastrados com sucesso!")
 
-    return sucesso
+    return sucesso, mapeamento_codigos
+
 
 def buscar_codigos_por_cpfs(database, lista_cpfs):
     codigos = {}

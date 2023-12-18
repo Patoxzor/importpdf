@@ -381,31 +381,27 @@ class App:
         self.save_codigos()
         self.view_mapping(dados_para_importar)
     
-    def atualizar_vinculo(self,tree):
-        if self.descricoes_atualizadas:
-            return
-        indice_coluna_vinculo = 8
+    def atualizar_vinculo(self, tree):
+        indice_coluna_vinculo = 8  # Coluna do Vínculo
         for item in tree.get_children():
             valores = list(tree.item(item, 'values'))
-            novo_valor = None
-            if valores[indice_coluna_vinculo] == '30 - Regime Juídico Vinculado a Regime Próprio':
-                novo_valor = '1'
-            elif valores[indice_coluna_vinculo] == '45 - Comissão':
-                novo_valor = '2'
-            elif valores[indice_coluna_vinculo] == '65 - Contrato Temporário':
-                novo_valor = '3'
-            elif valores[indice_coluna_vinculo] == '35 - Servidor Público Não Efetivo':
-                novo_valor = '4'
-            elif valores[indice_coluna_vinculo] == '55 - Prestação de Serviços':
-                novo_valor = '5'
-            elif valores[indice_coluna_vinculo] == '90 - Estatutário':
-                novo_valor = '6'
-            elif valores[indice_coluna_vinculo] == '50 - Temporário':
-                novo_valor = '8'
+            novo_valor = self.mapear_vinculo(valores[indice_coluna_vinculo])
             if novo_valor is not None:
                 valores[indice_coluna_vinculo] = novo_valor
                 tree.item(item, values=valores)
-        self.descricoes_atualizadas = True
+
+    def mapear_vinculo(self, descricao_vinculo):
+        mapeamento_vinculos = {
+            '30 - Regime Juídico Vinculado a Regime Próprio': '1',
+            '45 - Comissão': '2',
+            '65 - Contrato Temporário': '3',
+            '35 - Servidor Público Não Efetivo': '4',
+            '55 - Prestação de Serviços': '5',
+            '90 - Estatutário': '6',
+            '50 - Temporário': '8',
+        }
+        return mapeamento_vinculos.get(descricao_vinculo)
+
         
     def adicionar_coluna_codigo_empresa(self, tree, database, nome_tabela):
         nome_tabela = 'empresas'
@@ -624,7 +620,7 @@ class App:
             descricao_centro_custos = valores[2]
             descricao_secretaria = valores[3]
             descricao_cargo = valores[4] 
-            salario_valor = valores[-1] 
+            salario_valor = valores[-2] 
 
             try:
                 # Removendo 'R$' e substituindo ',' por '.'
@@ -672,7 +668,25 @@ class App:
 
                 dados_funcionario.append(valor_convertido)
             lista_dados_funcionarios.append(dados_funcionario)
-        inserir_funcionarios_no_banco(self.database, lista_dados_funcionarios, self.root)
+
+        sucesso, mapeamento_novos_codigos = inserir_funcionarios_no_banco(self.database, lista_dados_funcionarios, self.root)
+        print("Mapeamento após inserção:", mapeamento_novos_codigos)
+
+        if sucesso:
+
+            for codigo_original, codigo_novo in mapeamento_novos_codigos.items():
+                self.mapeamento_codigos[str(codigo_original)] = str(codigo_novo)
+
+            print("Antes de salvar mapeamento:", self.mapeamento_codigos)
+            self.save_codigos() 
+            print("Depois de salvar mapeamento:", self.mapeamento_codigos)
+            self.update_listbox(self.listbox_mapping, 'mapping')
+    
+    def atualizar_listbox_mapping(self):
+        self.listbox_mapping.delete(0, tk.END)
+        for codigo_original, codigo_novo in self.mapeamento_codigos.items():
+            self.listbox_mapping.insert(tk.END, f"{codigo_original} -> {codigo_novo}")
+
 
     def choose_color(self, target):
         color_code = colorchooser.askcolor(title="Escolha a cor", initialcolor=self.color_preferences.get(target))
@@ -836,7 +850,8 @@ class App:
 
 
     def update_listbox(self, listbox, tipo):
-        listbox.delete(0, tk.END)  
+        if listbox.winfo_exists():  # Verifica se o widget ainda existe
+            listbox.delete(0, tk.END)  
 
         if tipo == 'provento':
             items = self.codigos_proventos.items()
@@ -923,6 +938,7 @@ class App:
         self.codigos_data["descontos"] = self.codigos_desconto
         self.codigos_data["mapeamento"] = self.mapeamento_codigos
         self.save_to_file()
+        print("Mapeamento salvo:", self.mapeamento_codigos)
 
     def view_mapping(self, dados_importados=None):
         if 'view_mapping' in self.popup_windows and self.popup_windows['view_mapping'].winfo_exists():
@@ -940,27 +956,40 @@ class App:
         label_mapping = tk.Label(frame_mapping, text="Mapeamento de Códigos", font=("Arial", 12))
         label_mapping.pack()
 
-        self.listbox_mapping = tk.Listbox(frame_mapping)
+        scrollbar = ttk.Scrollbar(frame_mapping, orient="vertical")
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.listbox_mapping = tk.Listbox(frame_mapping, yscrollcommand=scrollbar.set)
         self.update_listbox(self.listbox_mapping, 'mapping')
-        self.listbox_mapping.pack(fill=tk.X)
+        self.listbox_mapping.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        scrollbar.config(command=self.listbox_mapping.yview)
 
         if dados_importados:
             for item in dados_importados:
                 self.listbox_mapping.insert(tk.END, item)
 
-        btn_add_mapping = tk.Button(frame_mapping, text="Adicionar", command=self.add_mapping)
+        for codigo_original, codigo_novo in self.mapeamento_codigos.items():
+            # Adicione o mapeamento à interface, por exemplo, a uma listbox
+            self.listbox_mapping.insert(tk.END, f"{codigo_original} -> {codigo_novo}")
+
+        # Frame para os botões
+        button_frame = tk.Frame(popup)
+        button_frame.pack(fill=tk.X)
+
+        btn_add_mapping = tk.Button(button_frame, text="Adicionar", command=self.add_mapping)
         btn_add_mapping.pack(side=tk.LEFT, padx=5)
 
-        btn_edit_mapping = tk.Button(frame_mapping, text="Editar", command=self.edit_mapping)
+        btn_edit_mapping = tk.Button(button_frame, text="Editar", command=self.edit_mapping)
         btn_edit_mapping.pack(side=tk.LEFT, padx=5)
 
-        btn_remove_mapping = tk.Button(frame_mapping, text="Remover", command=self.remove_mapping)
+        btn_remove_mapping = tk.Button(button_frame, text="Remover", command=self.remove_mapping)
         btn_remove_mapping.pack(side=tk.LEFT, padx=5)
 
-        self.button_clear_all_mappings = tk.Button(frame_mapping, text="Remover Todos", command=self.clear_all_mappings)
+        self.button_clear_all_mappings = tk.Button(button_frame, text="Remover Todos", command=self.clear_all_mappings)
         self.button_clear_all_mappings.pack(side=tk.LEFT, padx=5)
 
-        btn_close = tk.Button(popup, text="Fechar", command=lambda: [self.save_codigos(), popup.destroy()])
+        btn_close = tk.Button(button_frame, text="Fechar", command=lambda: [self.save_codigos(), popup.destroy()])
         btn_close.pack(pady=20)
         popup.wait_window()
         
