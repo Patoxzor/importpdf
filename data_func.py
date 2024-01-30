@@ -88,6 +88,7 @@ def extrair_dados_pdf(f, codigos_proventos, codigos_desconto, mapeamento_codigos
 
     df = pd.DataFrame(data)
 
+
     # Função para ordenar as colunas
     def ordenar_colunas(coluna):
         if coluna in colunas_padrao:

@@ -768,23 +768,34 @@ class App:
             self.save_codigos()
 
     def import_events_from_pdf(self):
-        if not self.filename:
-            messagebox.showwarning("Aviso", "Por favor, selecione um arquivo PDF primeiro.")
+        if not self.filenames:
+            messagebox.showwarning("Aviso", "Por favor, selecione um ou mais arquivos PDF primeiro.")
             return
 
         try:
-            proventos, descontos = extrair_e_categorizar_dados(self.filename)
-            
-            self.codigos_proventos.update({codigo: descricao for codigo, descricao, _, _ in proventos})
-            self.codigos_desconto.update({codigo: descricao for codigo, descricao, _, _ in descontos})
+            proventos_unicos = set()
+            descontos_unicos = set()
+
+            for arquivo in self.filenames:
+                proventos, descontos = extrair_e_categorizar_dados(arquivo)
+                for evento in proventos:
+                    proventos_unicos.add(evento)
+                for evento in descontos:
+                    descontos_unicos.add(evento)
+
+            # Atualize os dicionários de códigos com os novos eventos
+            for codigo, descricao, _, _ in proventos_unicos:
+                self.codigos_proventos[codigo] = descricao
+            for codigo, descricao, _, _ in descontos_unicos:
+                self.codigos_desconto[codigo] = descricao
+
             self.save_codigos()         
             self.update_listbox(self.listbox_proventos, 'provento')
             self.update_listbox(self.listbox_descontos, 'desconto')
             
-            messagebox.showinfo("Sucesso", "Eventos importados com sucesso do PDF.")
+            messagebox.showinfo("Sucesso", "Eventos importados com sucesso dos PDFs.")
         except Exception as e:
             messagebox.showerror("Erro", str(e))
-
 
     def view_codes(self):
         if 'view_codes' in self.popup_windows and self.popup_windows['view_codes'].winfo_exists():
@@ -1040,24 +1051,44 @@ class App:
             self.save_codigos()
 
     def open_pdf(self):
-        self.filename = filedialog.askopenfilename(filetypes=[("Arquivos PDF", "*.pdf")])
-        if self.filename:
+        self.filenames = filedialog.askopenfilenames(filetypes=[("Arquivos PDF", "*.pdf")])  # Retorna uma tupla de nomes de arquivo
+        if self.filenames:
             self.button_extract.config(state=tk.NORMAL)
             self.button_save.config(state=tk.DISABLED)
             self.button_open_excel.config(state=tk.DISABLED)
-            base_name = os.path.basename(self.filename)
-            self.label_filename.config(text=base_name)
+            
+            # Exibe os nomes dos arquivos selecionados ou apenas a quantidade
+            if len(self.filenames) > 1:
+                label_text = f"{len(self.filenames)} arquivos selecionados"
+            else:
+                label_text = os.path.basename(self.filenames[0])
+
+            self.label_filename.config(text=label_text)
 
     def extract_data(self):
         try:
-            self.df = extrair_dados_pdf(self.filename, self.codigos_proventos, self.codigos_desconto, self.mapeamento_codigos)
+            # Chama a função para processar e acumular dados de múltiplos PDFs
+            self.processar_e_acumular_pdfs()
+
             if 'CPF' in self.df.columns:
                 self.df['CPF'] = self.df['CPF'].apply(formatar_cpf)
+
+            # Exibe os dados na Treeview
             self.populate_tree()
             self.button_save.config(state=tk.NORMAL)
             self.button_verify.config(state=tk.NORMAL)
         except Exception as e:
             messagebox.showerror("Erro", str(e))
+
+    def processar_e_acumular_pdfs(self):
+        todos_os_dados = []  # Lista para armazenar os DataFrames de cada arquivo
+
+        for arquivo in self.filenames:
+            df = extrair_dados_pdf(arquivo, self.codigos_proventos, self.codigos_desconto, self.mapeamento_codigos)
+            todos_os_dados.append(df)
+
+        # Concatenar todos os DataFrames em um único DataFrame
+        self.df = pd.concat(todos_os_dados, ignore_index=True)
 
     def populate_tree(self):
         for row in self.tree.get_children():
