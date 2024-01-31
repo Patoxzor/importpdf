@@ -13,6 +13,7 @@ from log_erros import setup_logging, logger
 import tkinter.colorchooser as colorchooser
 from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro, buscar_empresa_por_descricao, verificar_cargo_e_salario, adicionar_funcao, verificar_codigo_funcao, inserir_funcionarios_no_banco, buscar_codigos_por_cpfs
 from eventos import extrair_e_categorizar_dados
+from export_csv import ExcelToCsvConverter
 
 class App:
     def __init__(self, root):
@@ -32,6 +33,7 @@ class App:
         self.color_button_frame.configure(background=self.color_preferences.get('background'))
         self.label_filename.configure(bg=self.color_preferences.get('background'))
         self.combobox_cpfs = ttk.Combobox(self.root, values=[], state='readonly')
+        self.converter = ExcelToCsvConverter('Codigo', ('_VALOR', '_QTD'))
         self.alteracoes_pendentes = []
         self.label_proventos = None
         self.label_descontos = None
@@ -95,6 +97,12 @@ class App:
 
         self.button_verificar_codigos = tk.Button(self.frame_buttons, text="Verificar Codigos existentes", command=lambda:self.codigos_divergentes(self.tree), **style)
         self.button_verificar_codigos.pack(side=tk.LEFT, padx=10)
+
+        self.button_process_excel = tk.Button(self.frame_buttons, text="Exportar CSV", command=self.processar_arquivos_excel, **style)
+        self.button_process_excel.pack(side=tk.LEFT, padx=10)
+    
+    def processar_arquivos_excel(self):
+        self.converter.processar_arquivos()
 
     def create_color_buttons(self):
         current_directory = os.path.dirname(os.path.realpath(__file__))
