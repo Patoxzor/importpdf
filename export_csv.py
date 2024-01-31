@@ -56,9 +56,16 @@ def gerar_csvs_por_grupo(file_path, coluna_codigo, sufixos):
             todas_linhas.append(df_sufixo)
 
         df_filtrado = pd.concat(todas_linhas, ignore_index=True)
-        # Reordenar colunas
-        colunas_ordenadas = [coluna_codigo] + [evento + sufixo for sufixo in sufixos]
-        df_filtrado = df_filtrado[colunas_ordenadas]
+
+        # Verifique se todas as colunas necessárias existem
+        colunas_necessarias = [coluna_codigo] + list(colunas_evento_sem_sufixo)
+        colunas_existentes = [col for col in colunas_necessarias if col in df_filtrado.columns]
+
+        if len(colunas_existentes) != len(colunas_necessarias):
+            print(f"Aviso: nem todas as colunas necessárias foram encontradas para o evento '{evento}'.")
+            print("Colunas faltantes:", set(colunas_necessarias) - set(colunas_existentes))
+
+        
 
         caminho_csv = os.path.join(diretorio, f"{evento}.csv")
         os.makedirs(os.path.dirname(caminho_csv), exist_ok=True)
@@ -67,8 +74,6 @@ def gerar_csvs_por_grupo(file_path, coluna_codigo, sufixos):
             df_existente = pd.read_csv(caminho_csv, sep=';')
             df_filtrado = pd.concat([df_existente, df_filtrado], ignore_index=True)
 
-        # Usar nomes de colunas sem sufixos numéricos para drop_duplicates
-        df_filtrado = df_filtrado.drop_duplicates(subset=[coluna_codigo] + list(colunas_evento_sem_sufixo))
         df_filtrado.to_csv(caminho_csv, index=False, sep=';', decimal=',', header=True, encoding='utf-8-sig', quotechar='|')
         print(f'Arquivo CSV atualizado: {caminho_csv}')
 

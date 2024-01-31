@@ -775,27 +775,51 @@ class App:
         try:
             proventos_unicos = set()
             descontos_unicos = set()
+            descricao_codigo_map = {}  # Mapeia descrição para código
+            eventos_com_mesma_descricao = []
 
             for arquivo in self.filenames:
                 proventos, descontos = extrair_e_categorizar_dados(arquivo)
-                for evento in proventos:
-                    proventos_unicos.add(evento)
-                for evento in descontos:
-                    descontos_unicos.add(evento)
+                for codigo, descricao, _, _ in proventos:
+                    proventos_unicos.add((codigo, descricao))
+                for codigo, descricao, _, _ in descontos:
+                    descontos_unicos.add((codigo, descricao))
 
-            # Atualize os dicionários de códigos com os novos eventos
-            for codigo, descricao, _, _ in proventos_unicos:
+            # Ordenar os proventos e descontos
+            proventos_ordenados = sorted(proventos_unicos, key=lambda x: int(x[0]))  # x[0] é o código
+            descontos_ordenados = sorted(descontos_unicos, key=lambda x: int(x[0]))
+
+            # Atualizar os dicionários com eventos ordenados
+            for codigo, descricao in proventos_ordenados:
                 self.codigos_proventos[codigo] = descricao
-            for codigo, descricao, _, _ in descontos_unicos:
+            for codigo, descricao in descontos_ordenados:
                 self.codigos_desconto[codigo] = descricao
+
+            # Verificar eventos com descrições iguais
+            for codigo, descricao in proventos_ordenados:
+                if descricao in descricao_codigo_map and descricao_codigo_map[descricao] != codigo:
+                    eventos_com_mesma_descricao.append(f"Evento: {codigo} - {descricao} tem a descrição igual ao evento: {descricao_codigo_map[descricao]} - {descricao}")
+                else:
+                    descricao_codigo_map[descricao] = codigo
+
+            for codigo, descricao in descontos_ordenados:
+                if descricao in descricao_codigo_map and descricao_codigo_map[descricao] != codigo:
+                    eventos_com_mesma_descricao.append(f"Evento: {codigo} - {descricao} tem a descrição igual ao evento: {descricao_codigo_map[descricao]} - {descricao}")
+                else:
+                    descricao_codigo_map[descricao] = codigo
 
             self.save_codigos()         
             self.update_listbox(self.listbox_proventos, 'provento')
             self.update_listbox(self.listbox_descontos, 'desconto')
-            
-            messagebox.showinfo("Sucesso", "Eventos importados com sucesso dos PDFs.")
+
+            if eventos_com_mesma_descricao:
+                aviso = "\n".join(eventos_com_mesma_descricao)
+                messagebox.showwarning("Aviso", f"Eventos com descrições iguais:\n{aviso}, \nAjuste a descrição de algum deles e veja se ficou correto quando extrair os dados")
+            else:
+                messagebox.showinfo("Sucesso", "Eventos importados com sucesso dos PDFs.")
         except Exception as e:
             messagebox.showerror("Erro", str(e))
+
 
     def view_codes(self):
         if 'view_codes' in self.popup_windows and self.popup_windows['view_codes'].winfo_exists():
@@ -865,12 +889,12 @@ class App:
             listbox.delete(0, tk.END)  
 
         if tipo == 'provento':
-            items = self.codigos_proventos.items()
+            items = sorted(self.codigos_proventos.items(), key=lambda x: int(x[0]))
             total = len(items)
             if self.label_proventos:
                 self.label_proventos.config(text=f"Proventos ({total})")
         elif tipo == 'desconto':
-            items = self.codigos_desconto.items()
+            items = sorted(self.codigos_desconto.items(), key=lambda x: int(x[0]))
             total = len(items)
             if self.label_descontos:
                 self.label_descontos.config(text=f"Descontos ({total})")

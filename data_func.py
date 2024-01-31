@@ -25,13 +25,20 @@ def extrair_cadastro(text, codigos_proventos, codigos_desconto):
     for field, pattern in patterns.items():
         results[field] = extract_field(text, pattern)
 
-    # Extrair campos de proventos
+    eventos_proventos_ocorrencias = {}
     for code, field_name in codigos_proventos.items():
-        pattern = rf'{code}\s*{field_name}\s*(.*?)\s*(\d{{1,3}}(?:\.\d{{3}})*,\d{{2}})\s*0,00'
-        match = re.search(pattern, text, re.MULTILINE | re.IGNORECASE)
-        if match:
-            results[field_name + '_QTD'] = match.group(1)
-            results[field_name + '_VALOR'] = match.group(2)
+        for match in re.finditer(rf'{code}\s*{field_name}\s*(.*?)\s*(\d{{1,3}}(?:\.\d{{3}})*,\d{{2}})\s*0,00', text, re.MULTILINE | re.IGNORECASE):
+            ocorrencia = eventos_proventos_ocorrencias.get(field_name, 0) + 1
+            eventos_proventos_ocorrencias[field_name] = ocorrencia
+
+            coluna_qtd = f'{field_name}_QTD'
+            coluna_valor = f'{field_name}_VALOR'
+            if ocorrencia > 1:
+                coluna_qtd = f'{coluna_qtd}_{ocorrencia}'
+                coluna_valor = f'{coluna_valor}_{ocorrencia}'
+
+            results[coluna_qtd] = match.group(1)
+            results[coluna_valor] = match.group(2)
 
      # Extrair campos de descontos com controle de eventos repetidos
     eventos_ocorrencias = {}
@@ -60,7 +67,8 @@ def limpar_celula(valor_celula):
     return valor_celula
 
 def limpar_qtd_colunas(df):
-    colunas_qtd = [col for col in df.columns if col.endswith("_QTD")]
+    # Utilizar uma expressão regular para encontrar colunas que terminam com _QTD seguido ou não de _ e números
+    colunas_qtd = [col for col in df.columns if re.search(r'_QTD(_\d+)?$', col)]
     for col in colunas_qtd:
         df[col] = df[col].apply(limpar_celula)
     return df
@@ -87,7 +95,6 @@ def extrair_dados_pdf(f, codigos_proventos, codigos_desconto, mapeamento_codigos
         nomes_eventos.append(field_name + '_VALOR')
 
     df = pd.DataFrame(data)
-
 
     # Função para ordenar as colunas
     def ordenar_colunas(coluna):
