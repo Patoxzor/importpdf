@@ -36,12 +36,11 @@ class ExcelToCsvConverter:
     def gerar_csvs_por_grupo(self, file_path, coluna_codigo):
         df = pd.read_excel(file_path)
         diretorio = os.path.dirname(file_path)
-        regex_eventos = re.compile(r'(.+?)(_VALOR|_QTD)(_?\d+)?')
+        regex_eventos = re.compile(r'(.+?)(_VALOR|_QTD)(_?\d+)?$')
         eventos = set(regex_eventos.match(col).groups()[0] for col in df.columns if regex_eventos.match(col))
 
         for evento in eventos:
-            colunas_evento = [col for col in df.columns if col.startswith(evento) and 
-                            (col.endswith('_QTD') or col.endswith('_VALOR') or re.search(r'(_VALOR|_QTD)_\d+', col))]
+            colunas_evento = [col for col in df.columns if regex_eventos.match(col) and regex_eventos.match(col).groups()[0] == evento]
 
             # Agrupar colunas por sufixo numérico
             grupos_sufixo = {}
