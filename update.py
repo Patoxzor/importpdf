@@ -5,7 +5,6 @@ import subprocess
 from urllib.request import urlretrieve
 from config_json import ConfigManager
 
-
 GITHUB_RELEASES_API_URL = 'https://api.github.com/repos/Patoxzor/importpdf/releases/latest'
 
 def get_latest_release_info():
@@ -13,29 +12,29 @@ def get_latest_release_info():
     return response.json() if response.ok else None
 
 def download_and_install_update(url, version):
-    local_filename = f'Mixpdf - {version}.exe'
-    urlretrieve(url, local_filename)
+    temp_filename = 'Mixpdf_new.exe'
+    final_filename = 'Mixpdf.exe'
+
+    urlretrieve(url, temp_filename)
 
     current_app_path = os.path.abspath(sys.argv[0])
+    directory = os.path.dirname(current_app_path)  
+    final_path = os.path.join(directory, final_filename)  # Caminho final do arquivo
 
-    # Verificar se o caminho atual é um arquivo .exe
     if current_app_path.endswith('.exe'):
-        old_app_path = f'{current_app_path}_old'
-        if os.path.exists(old_app_path):
-            os.remove(old_app_path)
-        os.rename(current_app_path, old_app_path)
-        os.replace(local_filename, current_app_path)
+        if os.path.exists(final_path):
+            os.remove(final_path)  
+        os.rename(temp_filename, final_path)  
 
         # Atualizando a versão registrada
         ConfigManager.save_version(version)
 
         # Reiniciando a aplicação
-        subprocess.Popen([local_filename])
+        subprocess.Popen([final_path], cwd=directory)
         sys.exit()
     else:
         # Atualização para ambiente de desenvolvimento, não reiniciar
         print("Atualização baixada. Reinicie manualmente o aplicativo.")
-
 
 def check_for_updates():
     current_version = ConfigManager.load_version()
