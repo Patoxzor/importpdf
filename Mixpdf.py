@@ -18,7 +18,7 @@ from export_csv import ExcelToCsvConverter
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("Extrair dados de PDF ANDRE MARKAS - Bebeto Apps Inc. - 1.0.1")
+        self.root.title("Extrair dados PDF ANDRE MARKAS - Bebeto Apps Inc. - 1.0.2")
         self.setup_ui()
         self.codigos_data = ConfigManager.load_from_file()
         current_directory = os.path.dirname(os.path.realpath(__file__))
