@@ -51,8 +51,8 @@ class ConfigManager:
     @staticmethod
     def load_version(filename="config.json"):
         data = ConfigManager.load_from_file(filename)
-        return data.get('version', '1.0.0')
+        return data.get('version', '1.0.2')
 
 config = ConfigManager()
-config.save_version("1.0.1")
+config.save_version("1.0.2")
 print(config.load_version())
