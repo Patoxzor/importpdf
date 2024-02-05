@@ -5,7 +5,6 @@ import subprocess
 from urllib.request import urlretrieve
 from config_json import ConfigManager
 
-
 GITHUB_RELEASES_API_URL = 'https://api.github.com/repos/Patoxzor/importpdf/releases/latest'
 
 def get_latest_release_info():
@@ -30,12 +29,10 @@ def download_and_install_update(url, version):
         ConfigManager.save_version(version)
 
         # Reiniciando a aplicação
-        subprocess.Popen([local_filename])
+        subprocess.Popen([current_app_path])
         sys.exit()
     else:
-        # Atualização para ambiente de desenvolvimento, não reiniciar
         print("Atualização baixada. Reinicie manualmente o aplicativo.")
-
 
 def check_for_updates():
     current_version = ConfigManager.load_version()
