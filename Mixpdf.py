@@ -11,7 +11,7 @@ from update import check_for_updates, download_and_install_update
 import os
 from log_erros import setup_logging, logger
 import tkinter.colorchooser as colorchooser
-from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro, buscar_empresa_por_descricao, verificar_cargo_e_salario, adicionar_funcao, verificar_codigo_funcao, inserir_funcionarios_no_banco, buscar_codigos_por_cpfs
+from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro, buscar_empresa_por_descricao, verificar_cargo_e_salario, adicionar_funcao, verificar_codigo_funcao, inserir_funcionarios_no_banco, buscar_codigos_por_cpfs, solicitar_periodo, inserir_acumulos, atualizar_funcionarios_e_empresa
 from eventos import extrair_e_categorizar_dados
 from export_csv import ExcelToCsvConverter
 
@@ -100,6 +100,14 @@ class App:
 
         self.button_process_excel = tk.Button(self.frame_buttons, text="Exportar CSV", command=self.processar_arquivos_excel, **style)
         self.button_process_excel.pack(side=tk.LEFT, padx=10)
+
+        self.button_inserir_acumulos = tk.Button(self.frame_buttons, text="Ativar cadastro", command=self.ativar_cadastros, **button_style())
+        self.button_inserir_acumulos.pack(side=tk.LEFT, padx=10)
+
+        self.button_inserir_acumulos = tk.Button(self.frame_buttons, text="Inserir Acumulos", command=self.acumular_codigos_funcionarios, **button_style())
+        self.button_inserir_acumulos.pack(side=tk.LEFT, padx=10)
+
+
     
     def processar_arquivos_excel(self):
         self.converter.processar_arquivos()
@@ -474,6 +482,36 @@ class App:
             values[col_index] = new_value
             tree.item(item, values=values)
  
+    def ativar_cadastros(self):
+        if hasattr(self, 'df') and not self.df.empty:
+            selected_database = self.database_combobox.get()
+            self.database = criar_conexao_sql_server(selected_database)
+
+            for _, row in self.df.iterrows():
+                descricao = row['Secretaria']
+                codigo_funcionario = row['Codigo']  # Asumindo que 'Codigo' é a coluna dos códigos dos funcionários
+                codigo_empresa = buscar_empresa_por_descricao(self.database, "empresas", descricao)
+                if codigo_empresa:
+                    atualizar_funcionarios_e_empresa(self.database, [codigo_funcionario], codigo_empresa)
+        else:
+            messagebox.showwarning("Aviso", "Por favor, extraia os dados dos PDFs primeiro.")
+
+
+    def acumular_codigos_funcionarios(self):
+        if hasattr(self, 'df') and not self.df.empty:
+            lista_codigos = self.df['Codigo'].unique().tolist()
+
+            # Verifica se há códigos para processar
+            if lista_codigos:
+                selected_database = self.database_combobox.get()
+                self.database = criar_conexao_sql_server(selected_database)
+                inserir_acumulos(self.database, self.root, lista_codigos)  
+            else:
+                messagebox.showwarning("Aviso", "Nenhum código de funcionário foi encontrado nos arquivos PDF.")
+        else:
+            messagebox.showwarning("Aviso", "Por favor, extraia os dados dos PDFs primeiro.")
+
+
     def verificar_centros_custos_e_secretarias_treeview(self, tree, nome_tabela_centro_custos, nome_tabela_secretaria):
         centros_custos_unicos = set()
         secretarias_unicas = set()

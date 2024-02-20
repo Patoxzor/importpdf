@@ -1,4 +1,4 @@
-from tkinter import messagebox
+from tkinter import messagebox, simpledialog
 import pyodbc
 import socket
 from log_erros import logger
@@ -211,5 +211,62 @@ def buscar_codigos_por_cpfs(database, lista_cpfs):
         except pyodbc.Error as e:
             messagebox.showerror(f"Erro ao buscar código para o CPF {cpf}")
     return codigos
-   
+
+def solicitar_periodo(root):
+    """
+    Solicita ao usuário que insira o período desejado.
+    """
+    periodo = simpledialog.askstring("Input", "Digite o período desejado (MM/AAAA):", parent=root)
+    return periodo
+
+def inserir_acumulos(database, root, lista_codigos):
+    try:
+        cursor = database.cursor()
+        
+        # Solicita ao usuário o período desejado
+        periodo = solicitar_periodo(root)
+        if not periodo:
+            raise ValueError("Período não informado.")
+        
+        motivo = 0
+        status = 1
+        
+        # Prepara a string SQL com os códigos dos funcionários
+        codigos_formatados = ', '.join(f"'{codigo}'" for codigo in lista_codigos)
+        
+        sql = f"""
+        INSERT INTO ACUMULOS (EMPRESA, CENTROCUSTO, FUNCIONARIO, PERIODO,
+                        DEPENDENTES, FILHOS, LOCALIZACAO, ATIVO,
+                        SALARIO, FUNCAO, GFIP_CATEGORIA, OUTRA_PREVIDENCIA,
+                        DATAADM, BANCOSALARIO, CONTACORRENTE, DATADEMISSAO, OPERACAO,
+                        AGENCIA, NUMEROCONTRATO, PARTICIPAGPS, PARTICIPASEFIP, STATUS)
+        (SELECT DISTINCT EMPRESA, CENTROCUSTO, F.CODIGO, ?, DEPENDENTES, FILHOS,
+                LOCALIZACAO, ?, SALARIO, FUNCAO, GFIP_CATEGORIA, OUTRA_PREVIDENCIA,
+                DATAADM, BANCOSALARIO, CONTACORRENTE, DATADEMISSAO, OPERACAO,
+                AGENCIA, NUMEROCONTRATO, PARTICIPAGPS, PARTICIPASEFIP, ?
+        FROM FUNCIONARIOS F
+        WHERE NOT EXISTS (SELECT 1 FROM ACUMULOS 
+                          WHERE FUNCIONARIO = F.CODIGO 
+                          AND PERIODO=?)
+                          AND F.Codigo IN ({codigos_formatados}))
+        """
+        
+        cursor.execute(sql, (periodo, status, motivo, periodo))
+        database.commit()
+        messagebox.showinfo("Concluído", "A inserção dos acumulos foi concluída com sucesso.")
+    except ValueError as ve:
+        messagebox.showerror("Erro", str(ve))
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao inserir acumulos: {e}")
+
+def atualizar_funcionarios_e_empresa(database, lista_codigos, codigo_empresa):
+    codigos_formatados = ', '.join(f"'{codigo}'" for codigo in lista_codigos)
+    query = f"""
+    UPDATE FUNCIONARIOS
+    SET Ativo = '1', Empresa = {codigo_empresa}
+    WHERE Codigo IN ({codigos_formatados})
+    """
+    cursor = database.cursor()
+    cursor.execute(query)
+    database.commit()
 
