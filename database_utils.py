@@ -5,7 +5,7 @@ from log_erros import logger
 
 def criar_conexao_sql_server(database_sqlserver = None):
     try:
-        server = f'{socket.gethostname()}\\SQL2008'
+        server = f'{socket.gethostname()}\\SQL2019'
         username = 'SA'
         password = ''
         driver = '{SQL Server Native Client 10.0}'
@@ -260,13 +260,19 @@ def inserir_acumulos(database, root, lista_codigos):
         messagebox.showerror("Erro", f"Erro ao inserir acumulos: {e}")
 
 def atualizar_funcionarios_e_empresa(database, lista_codigos, codigo_empresa):
-    codigos_formatados = ', '.join(f"'{codigo}'" for codigo in lista_codigos)
+    # Convertendo a lista de códigos para strings para uso na cláusula SQL IN
+    codigos_str = ', '.join(f"'{codigo}'" for codigo in lista_codigos)
     query = f"""
     UPDATE FUNCIONARIOS
     SET Ativo = '1', Empresa = {codigo_empresa}
-    WHERE Codigo IN ({codigos_formatados})
+    WHERE Codigo IN ({codigos_str})
     """
     cursor = database.cursor()
-    cursor.execute(query)
-    database.commit()
+    try:
+        cursor.execute(query)
+        database.commit()
+    except Exception as e:
+        database.rollback()  # Desfaz as alterações em caso de erro
+        messagebox.showerror("Erro", f"Erro ao atualizar funcionários: {e}")
+
 

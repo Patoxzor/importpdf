@@ -4,7 +4,8 @@ import pandas as pd
 
 def extract_field(text, pattern):
     match = re.search(pattern, text, re.MULTILINE)
-    return match.group(1) if match else None
+    return match.group(1) if match else ""
+
 
 def extrair_cadastro(text, codigos_proventos, codigos_desconto):
     patterns = {
