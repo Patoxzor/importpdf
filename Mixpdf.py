@@ -11,7 +11,7 @@ from update import check_for_updates, download_and_install_update
 import os
 from log_erros import setup_logging, logger
 import tkinter.colorchooser as colorchooser
-from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro, buscar_empresa_por_descricao, verificar_cargo_e_salario, adicionar_funcao, verificar_codigo_funcao, inserir_funcionarios_no_banco, buscar_codigos_por_cpfs, solicitar_periodo, inserir_acumulos, atualizar_funcionarios_e_empresa
+from database_utils import get_sql_server_databases, verificar_todos_funcionarios, verificar_existencia, criar_conexao_sql_server, criar_registro, buscar_empresa_por_descricao, verificar_cargo_e_salario, adicionar_funcao, verificar_codigo_funcao, inserir_funcionarios_no_banco, buscar_codigos_por_cpfs, solicitar_periodo, inserir_acumulos, atualizar_funcionarios_e_empresa, buscar_centrocusto_por_descricao, buscar_localizacao_por_descricao
 from eventos import extrair_e_categorizar_dados
 from export_csv import ExcelToCsvConverter
 
@@ -486,16 +486,30 @@ class App:
         if hasattr(self, 'df') and not self.df.empty:
             selected_database = self.database_combobox.get()
             self.database = criar_conexao_sql_server(selected_database)
-
+            
+            informacoes_funcionarios = []
             for _, row in self.df.iterrows():
-                descricao = row['Secretaria']
-                codigo_funcionario = row['Codigo']  # Asumindo que 'Codigo' é a coluna dos códigos dos funcionários
-                codigo_empresa = buscar_empresa_por_descricao(self.database, "empresas", descricao)
-                if codigo_empresa:
-                    atualizar_funcionarios_e_empresa(self.database, [codigo_funcionario], codigo_empresa)
+                codigo_funcionario = row['Codigo']
+                # Assumindo que a coluna 2 (índice 1) contém descrições que podem ser mapeadas tanto para centrocusto quanto para localizacao
+                descricao_empresa_localizacao = row[3]  # Utilizando a mesma coluna para buscar tanto centrocusto quanto localizacao
+                descricao = row[2]
+                
+                codigo_centrocusto = buscar_centrocusto_por_descricao(self.database, descricao)
+                codigo_localizacao = buscar_localizacao_por_descricao(self.database, descricao_empresa_localizacao)
+                codigo_empresa = buscar_empresa_por_descricao(self.database, descricao_empresa_localizacao)  # Buscar o código da empresa da mesma maneira
+                
+                informacoes_funcionarios.append({
+                    'codigo': codigo_funcionario,
+                    'codigo_empresa': codigo_empresa,
+                    'codigo_centrocusto': codigo_centrocusto,
+                    'descricao_localizacao': codigo_localizacao,
+                    'ativo': '1'  # Definindo ativo como '1' para todos os funcionários
+                })
+            
+            if informacoes_funcionarios:
+                atualizar_funcionarios_e_empresa(self.database, informacoes_funcionarios)
         else:
             messagebox.showwarning("Aviso", "Por favor, extraia os dados dos PDFs primeiro.")
-
 
     def acumular_codigos_funcionarios(self):
         if hasattr(self, 'df') and not self.df.empty:

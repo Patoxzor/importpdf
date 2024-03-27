@@ -85,10 +85,26 @@ def obter_codigo_e_descricao(nome_tabela, descricao, database):
         messagebox.showerror("Erro", f"Erro ao obter código e descrição: {e}")
         return None, None
 
-def buscar_empresa_por_descricao(database, nome_tabela, descricao):
+def buscar_empresa_por_descricao(database, descricao):
     cursor = database.cursor()
     descricao_like = f"%{descricao}%"
-    query = f"SELECT codigo, razaosocial FROM {nome_tabela} WHERE razaosocial LIKE ?"
+    query = f"SELECT codigo, razaosocial FROM empresas WHERE razaosocial LIKE ?"
+    cursor.execute(query, (descricao_like,))
+    resultado = cursor.fetchone()
+    return resultado[0] if resultado else None
+
+def buscar_centrocusto_por_descricao(database, descricao):
+    cursor = database.cursor()
+    descricao_like = f"%{descricao}%"
+    query = f"SELECT codigo, descricao FROM centrocusto WHERE descricao LIKE ?"
+    cursor.execute(query, (descricao_like,))
+    resultado = cursor.fetchone()
+    return resultado[0] if resultado else None
+
+def buscar_localizacao_por_descricao(database, descricao):
+    cursor = database.cursor()
+    descricao_like = f"%{descricao}%"
+    query = f"SELECT codigo, descricao FROM localizacao WHERE descricao LIKE ?"
     cursor.execute(query, (descricao_like,))
     resultado = cursor.fetchone()
     return resultado[0] if resultado else None
@@ -259,20 +275,63 @@ def inserir_acumulos(database, root, lista_codigos):
     except Exception as e:
         messagebox.showerror("Erro", f"Erro ao inserir acumulos: {e}")
 
-def atualizar_funcionarios_e_empresa(database, lista_codigos, codigo_empresa):
-    # Convertendo a lista de códigos para strings para uso na cláusula SQL IN
-    codigos_str = ', '.join(f"'{codigo}'" for codigo in lista_codigos)
-    query = f"""
-    UPDATE FUNCIONARIOS
-    SET Ativo = '1', Empresa = {codigo_empresa}
-    WHERE Codigo IN ({codigos_str})
-    """
+def atualizar_funcionarios_e_empresa(database, informacoes_funcionarios):
     cursor = database.cursor()
-    try:
-        cursor.execute(query)
-        database.commit()
-    except Exception as e:
-        database.rollback()  # Desfaz as alterações em caso de erro
-        messagebox.showerror("Erro", f"Erro ao atualizar funcionários: {e}")
+    for info in informacoes_funcionarios:
+        codigo = info['codigo']
+        codigo_empresa = info['codigo_empresa']
+        codigo_centrocusto = info['codigo_centrocusto']
+        descricao_localizacao = info['descricao_localizacao']
+        ativo = info['ativo']  # Garantindo que o campo ativo seja atualizado
+        
+        try:
+            query = """
+            UPDATE FUNCIONARIOS
+            SET Empresa = ?, Centrocusto = ?, Localizacao = ?, Ativo = ?
+            WHERE Codigo = ?
+            """
+            cursor.execute(query, (codigo_empresa, codigo_centrocusto, descricao_localizacao, ativo, codigo))
+        except Exception as e:
+            database.rollback()  # Desfaz as alterações em caso de erro
+            messagebox.showerror("Erro", f"Erro ao atualizar o funcionário {codigo}: {e}")
+            continue  # Continua para tentar atualizar o próximo registro
+    database.commit()
 
+
+def inserir_movimento(database, empresa, funcionario, periodo, tipo_calculo):
+    try:
+        conn = criar_conexao_sql_server(database)
+        cursor = conn.cursor()
+        # Insere o novo movimento
+        cursor.execute("""
+            INSERT INTO FOLHA.DBO.MOVIMENTOS (Empresa, Funcionario, Periodo, TipoCalculo)
+            VALUES (?, ?, ?, ?);
+            SELECT SCOPE_IDENTITY();
+        """, (empresa, funcionario, periodo, tipo_calculo))
+        movimento_id = cursor.fetchone()[0]
+        conn.commit()
+        return movimento_id
+    except pyodbc.Error as e:
+        messagebox.showerror("Aviso", f"Erro ao inserir movimento: {e}")
+        logger.error(f"Erro ao inserir movimento: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def inserir_item_movimento(database, movimento_id, evento, quantidade, valor_unitario, valor_total):
+    try:
+        conn = criar_conexao_sql_server(database)
+        cursor = conn.cursor()
+        # Insere o item do movimento
+        cursor.execute("""
+            INSERT INTO FOLHA.DBO.MOVIMENTOITENS (Movimento, Evento, Qtd, ValorUnitario, Valor)
+            VALUES (?, ?, ?, ?, ?);
+        """, (movimento_id, evento, quantidade, valor_unitario, valor_total))
+        conn.commit()
+    except pyodbc.Error as e:
+        messagebox.showerror("Aviso", f"Erro ao inserir item de movimento: {e}")
+        logger.error(f"Erro ao inserir item de movimento: {e}")
+    finally:
+        if conn:
+            conn.close()
 
